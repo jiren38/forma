@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Plus, Trash2, Check, ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ShoppingCart, Plus, Trash2, Check, ChevronLeft, ChevronRight, Share2, ScanBarcode, Bookmark } from 'lucide-react';
 import { useMealPlans, useMeta, patchMeta } from '@/app/data';
 import { store } from '@/db/store';
 import { addDays, dayKey, fmtN, fromKey, startOfWeek, uid } from '@/lib/util';
-import { PageHeader, Empty, useToast } from '@/components/ui';
+import { PageHeader, Empty, Sheet, useToast } from '@/components/ui';
 import { findFood } from './common';
-import type { Recipe } from '@/lib/types';
+import type { Food, Recipe } from '@/lib/types';
 
 export default function ShoppingList() {
   const toast = useToast();
@@ -16,6 +16,8 @@ export default function ShoppingList() {
   const plans = useMealPlans();
   const meta = useMeta();
   const [extra, setExtra] = useState('');
+  const [pickSaved, setPickSaved] = useState(false);
+  const nav = useNavigate();
 
   const items = useMemo(() => {
     const days = new Set(Array.from({ length: 7 }, (_, i) => dayKey(addDays(ws, i))));
@@ -47,6 +49,14 @@ export default function ShoppingList() {
   const checked = new Set(meta.shoppingChecked);
   const toggle = (id: string) => patchMeta({ shoppingChecked: checked.has(key(id)) ? meta.shoppingChecked.filter((x) => x !== key(id)) : [...meta.shoppingChecked.filter((x) => x.slice(0, 10) >= dayKey(addDays(new Date(), -60))), key(id)] });
   const extras = meta.shoppingExtra ?? [];
+  const saved = (meta.favoriteFoods ?? []).map((id) => findFood(id)).filter((f): f is Food => !!f);
+  const inShopping = (id: string) => extras.some((x) => x.foodId === id);
+  const addSaved = (f: Food) => {
+    if (inShopping(f.id)) return;
+    patchMeta({ shoppingExtra: [...extras, { id: uid('x_'), name: f.brand ? `${f.name} · ${f.brand}` : f.name, foodId: f.id }] });
+    toast(`${f.name} aggiunto alla spesa`);
+  };
+  const scanForShopping = () => nav('/nutrition/scan?to=shopping');
   const total = items.reduce((a, [, l]) => a + l.length, 0) + extras.length;
   const fmtQ = (g: number, unit?: string, ug?: number) => (g >= 1000 ? `${fmtN(g / 1000, 2)} kg` : `${Math.round(g)} g`) + (unit && ug ? ` (~${fmtN(g / ug, 1)} ${unit})` : '');
 
@@ -68,12 +78,33 @@ export default function ShoppingList() {
         <div className="center"><b>Settimana</b><div className="tiny muted">{ws.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} – {addDays(ws, 6).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}</div></div>
         <button className="icon-btn ghost" onClick={() => shift(1)} aria-label="Settimana successiva"><ChevronRight size={20} /></button>
       </div>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn grow" onClick={scanForShopping}><ScanBarcode size={18} /> Scansiona</button>
+        <button className="btn grow" onClick={() => setPickSaved(true)}><Bookmark size={18} /> Dalla mia lista</button>
+      </div>
+      <Sheet open={pickSaved} onClose={() => setPickSaved(false)} title="Dalla mia lista">
+        {saved.length === 0 ? (
+          <div className="stack">
+            <p className="small muted">La tua lista è vuota. Scansiona un prodotto e tocca «Salva nella mia lista» per ritrovarlo qui.</p>
+            <button className="btn primary block" onClick={scanForShopping}><ScanBarcode size={18} /> Scansiona un prodotto</button>
+          </div>
+        ) : (
+          <div className="settings-group">
+            {saved.map((f) => (
+              <button key={f.id} className="list-item" disabled={inShopping(f.id)} onClick={() => addSaved(f)} aria-label={inShopping(f.id) ? `${f.name} è già nella spesa` : `Aggiungi ${f.name} alla spesa`}>
+                <span className="grow" style={{ minWidth: 0, textAlign: 'left' }}><div className="li-title ellipsis">{f.name}</div>{f.brand && <div className="li-sub ellipsis">{f.brand}</div>}</span>
+                {inShopping(f.id) ? <span className="pill">In lista</span> : <Plus size={18} />}
+              </button>
+            ))}
+          </div>
+        )}
+      </Sheet>
       <form className="row" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); if (!extra.trim()) return; patchMeta({ shoppingExtra: [...extras, { id: uid('x_'), name: extra.trim() }] }); setExtra(''); }}>
         <input className="input grow" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Aggiungi un articolo (es. detersivo)" aria-label="Nuovo articolo" maxLength={60} />
         <button className="btn" type="submit" aria-label="Aggiungi articolo"><Plus size={18} /></button>
       </form>
       {total === 0 ? (
-        <Empty icon={<ShoppingCart />} title="Lista vuota" text="La lista si genera automaticamente dal piano pasti della settimana (ingredienti delle ricette inclusi)." action={<Link to="/nutrition/plan" className="btn primary">Apri il piano pasti</Link>} />
+        <Empty icon={<ShoppingCart />} title="Lista vuota" text="La lista si genera dal piano pasti della settimana. Puoi anche scansionare un prodotto o aggiungerlo dalla tua lista." action={<Link to="/nutrition/plan" className="btn primary">Apri il piano pasti</Link>} />
       ) : (
         <>
           {items.map(([cat, list]) => (
