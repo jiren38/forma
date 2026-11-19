@@ -79,6 +79,19 @@ export default function Onboarding() {
     } finally { setBusy(false); }
   }
 
+  // "Salta": va subito alla home; i dati si completano poi a mano dal profilo
+  async function skip() {
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      await saveProfile({ ...p, name: p.name.trim(), onboardedAt: p.onboardedAt ?? now, equipmentSetAt: now });
+      try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+      toast('Puoi completare i tuoi dati quando vuoi dal Profilo', 'info');
+    } catch (e: any) {
+      toast(e?.message ?? 'Errore durante il salvataggio', 'error');
+    } finally { setBusy(false); }
+  }
+
   async function next() {
     if (!cur.valid()) { if (step !== 1) toast(step === 3 ? 'Seleziona almeno un obiettivo' : step === 8 ? 'Seleziona almeno un luogo o un attrezzo' : 'Completa i campi richiesti', 'error'); return; }
     if (step === 7) {
@@ -94,7 +107,10 @@ export default function Onboarding() {
       <div className="ob-top">
         <div className="row-between" style={{ marginBottom: 12 }}>
           {step > 0 ? <button className="icon-btn ghost" onClick={() => setStep(step - 1)} aria-label="Indietro"><ArrowLeft size={22} /></button> : <div className="brand"><BrandMark /> Forma</div>}
-          <span className="muted small">Passo {step + 1} di {steps.length}</span>
+          <div className="row" style={{ gap: 14, alignItems: 'center' }}>
+            <span className="muted small">Passo {step + 1} di {steps.length}</span>
+            <button className="link-btn" disabled={busy} onClick={skip} aria-label="Salta la configurazione e vai alla home">Salta</button>
+          </div>
         </div>
         <div className="ob-progress" role="progressbar" aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={steps.length}><i style={{ width: `${((step + 1) / steps.length) * 100}%` }} /></div>
       </div>

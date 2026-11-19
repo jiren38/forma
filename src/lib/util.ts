@@ -53,7 +53,8 @@ export function fmtW(kg: number | null | undefined, units: 'kg' | 'lb') {
   const v = toDisplayWeight(kg, units);
   return v === null ? '–' : `${v.toLocaleString('it-IT', { maximumFractionDigits: 1 })} ${units}`;
 }
-export const fmtN = (n: number, d = 0) => n.toLocaleString('it-IT', { maximumFractionDigits: d, minimumFractionDigits: 0 });
+// valori non calcolabili (es. profilo ancora vuoto dopo "Salta") diventano un trattino invece di NaN
+export const fmtN = (n: number, d = 0) => (Number.isFinite(n) ? n.toLocaleString('it-IT', { maximumFractionDigits: d, minimumFractionDigits: 0 }) : '–');
 
 export function normalize(s: string) {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’']/g, ' ');
