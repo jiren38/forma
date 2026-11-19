@@ -36,13 +36,13 @@ export default function MyFoodsPage() {
           ))}
         </div>
       )}
-      <div className="section-title">Preferiti</div>
-      {favs.length === 0 ? <p className="small muted">Nessun alimento preferito. Puoi aggiungerli quando registri un pasto.</p> : (
+      <div className="section-title">La mia lista</div>
+      {favs.length === 0 ? <p className="small muted">La tua lista è vuota. Puoi salvarci gli alimenti quando li aggiungi a un pasto.</p> : (
         <div className="settings-group">
           {favs.map((f) => (
             <div key={f.id} className="list-item" style={{ cursor: 'default' }}>
               <span className="grow"><div className="li-title">{f.name}</div><div className="li-sub">{f.kcal} kcal/100 g</div></span>
-              <button className="icon-btn ghost" onClick={() => patchMeta({ favoriteFoods: meta.favoriteFoods.filter((x) => x !== f.id) })} aria-label={`Rimuovi ${f.name} dai preferiti`}><Heart size={17} fill="var(--accent)" color="var(--accent)" /></button>
+              <button className="icon-btn ghost" onClick={() => patchMeta({ favoriteFoods: meta.favoriteFoods.filter((x) => x !== f.id) })} aria-label={`Rimuovi ${f.name} dalla tua lista`}><Heart size={17} fill="var(--accent)" color="var(--accent)" /></button>
             </div>
           ))}
         </div>

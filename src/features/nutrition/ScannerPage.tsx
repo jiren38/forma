@@ -27,6 +27,7 @@ export default function ScannerPage() {
   const ctx = new URLSearchParams();
   if (sp.get('date')) ctx.set('date', sp.get('date')!);
   if (sp.get('slot')) ctx.set('slot', sp.get('slot')!);
+  if (sp.get('to')) ctx.set('to', sp.get('to')!); // es. 'shopping': dalla lista della spesa
   const qs = ctx.toString() ? `?${ctx}` : '';
 
   const videoRef = useRef<HTMLVideoElement>(null);

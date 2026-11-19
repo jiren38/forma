@@ -85,7 +85,7 @@ export default function AddFood() {
       <div className="chips">
         <button className={`chip ${tab === 'search' ? 'on' : ''}`} onClick={() => setTab('search')}><Search size={13} /> Database</button>
         <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Recenti</button>
-        <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
+        <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> La mia lista</button>
         <button className={`chip ${tab === 'meals' ? 'on' : ''}`} onClick={() => setTab('meals')}><Bookmark size={13} /> Pasti salvati</button>
         <button className={`chip ${tab === 'recipes' ? 'on' : ''}`} onClick={() => setTab('recipes')}><BookOpen size={13} /> Ricette</button>
       </div>
@@ -105,11 +105,11 @@ export default function AddFood() {
               {off && !off.loading && !off.error && (off.results.length ? <FoodList foods={off.results} onPick={pickOnline} /> : <p className="small muted">Nessun prodotto trovato online.</p>)}
             </div>
           )}
-          {!q && <p className="small muted">Cerca tra oltre {foods.length} alimenti con valori medi per 100 g, oppure usa recenti e preferiti.</p>}
+          {!q && <p className="small muted">Cerca tra oltre {foods.length} alimenti con valori medi per 100 g, oppure usa recenti e la tua lista.</p>}
         </>
       )}
       {tab === 'recent' && (recent.length ? <FoodList foods={recent} onPick={pick} /> : <Empty icon={<Clock />} title="Nessun alimento recente" />)}
-      {tab === 'fav' && (favs.length ? <FoodList foods={favs} onPick={pick} /> : <Empty icon={<Heart />} title="Nessun preferito" text="Quando aggiungi un alimento puoi segnarlo come preferito." />)}
+      {tab === 'fav' && (favs.length ? <FoodList foods={favs} onPick={pick} /> : <Empty icon={<Heart />} title="La tua lista è vuota" text="Scansiona un prodotto e tocca «Salva nella mia lista»: lo ritroverai qui." />)}
       {tab === 'meals' && (saved.length ? (
         <div className="settings-group">
           {saved.map((m) => (

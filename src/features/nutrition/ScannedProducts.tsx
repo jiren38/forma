@@ -1,4 +1,4 @@
-/** Prodotti scansionati: ultimi, preferiti, più aggiunti, creati da te, con ricerca per nome e marca. */
+/** Prodotti scansionati: ultimi, la mia lista, più aggiunti, creati da te, con ricerca per nome e marca. */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ScanBarcode, Clock, Heart, TrendingUp, PenLine, Plus, Package } from 'lucide-react';
@@ -34,6 +34,7 @@ export default function ScannedProducts() {
   const qs = new URLSearchParams();
   if (sp.get('date')) qs.set('date', sp.get('date')!);
   if (sp.get('slot')) qs.set('slot', sp.get('slot')!);
+  if (sp.get('to')) qs.set('to', sp.get('to')!);
   const q0 = qs.toString() ? `?${qs}` : '';
   const products = useProductsList();
   const meta = useMeta();
@@ -62,7 +63,7 @@ export default function ScannedProducts() {
   const open = (f: Food) => nav(`/nutrition/product/${f.barcode}${q0}`);
   const empty: Record<Tab, { icon: JSX.Element; title: string; text: string }> = {
     recent: { icon: <Clock />, title: 'Nessun prodotto scansionato', text: 'Scansiona il codice a barre di una confezione: lo ritroverai qui, pronto da aggiungere al diario.' },
-    fav: { icon: <Heart />, title: 'Nessun prodotto preferito', text: 'Nella scheda di un prodotto tocca il cuore per averlo sempre a portata di mano.' },
+    fav: { icon: <Heart />, title: 'La tua lista è vuota', text: 'Nella scheda di un prodotto tocca «Salva nella mia lista» per averlo sempre a portata di mano.' },
     freq: { icon: <TrendingUp />, title: 'Ancora nessun prodotto frequente', text: 'Qui compaiono i prodotti che aggiungi più spesso al diario.' },
     mine: { icon: <PenLine />, title: 'Nessun prodotto creato da te', text: 'Quando un codice non è nel database puoi inserire i dati a mano: il prodotto comparirà qui.' },
   };
@@ -75,7 +76,7 @@ export default function ScannedProducts() {
       {!q && (
         <div className="chips">
           <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Ultimi</button>
-          <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
+          <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> La mia lista</button>
           <button className={`chip ${tab === 'freq' ? 'on' : ''}`} onClick={() => setTab('freq')}><TrendingUp size={13} /> Più aggiunti</button>
           <button className={`chip ${tab === 'mine' ? 'on' : ''}`} onClick={() => setTab('mine')}><PenLine size={13} /> Creati da te</button>
         </div>

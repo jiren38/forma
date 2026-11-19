@@ -1,7 +1,7 @@
 /** Scheda del prodotto scansionato: dati, tabella nutrizionale, quantità con calcolo immediato e aggiunta al diario. */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Heart, Pencil, Barcode, Package, PackageSearch, WifiOff, RefreshCw, ScanBarcode, Keyboard, Minus, Plus, Check, AlertTriangle, ChevronRight, RotateCcw } from 'lucide-react';
+import { Bookmark, Pencil, Barcode, Package, PackageSearch, WifiOff, RefreshCw, ScanBarcode, Keyboard, Minus, Plus, Check, AlertTriangle, ChevronRight, RotateCcw } from 'lucide-react';
 import { patchMeta, useActiveProgram, useCustomFoods, useDiary, useMeta, useProfile, useSettings } from '@/app/data';
 import { PageHeader, Segmented, Sheet, Ring, MacroBar, useToast } from '@/components/ui';
 import { formatCode } from '@/lib/barcode';
@@ -9,7 +9,7 @@ import { allergenLabel } from '@/lib/off';
 import { targetsFor } from '@/lib/insights';
 import { totals } from '@/lib/nutrition';
 import { MEAL_LABEL, MEAL_ORDER } from '@/lib/labels';
-import { dayKey, fmtN, fromKey } from '@/lib/util';
+import { dayKey, fmtN, fromKey, uid } from '@/lib/util';
 import type { Food, MealSlot } from '@/lib/types';
 import { defaultSlot } from './common';
 import { NUTRIENTS, NUTRIENT_LABEL, addProductToDiary, isStale, localProduct, lookupProduct, per100Of, portionOptions, scaleNutrients, type LookupResult, type Nutrients } from './products';
@@ -159,6 +159,22 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
   const fav = meta.favoriteFoods.includes(food.id);
   const missing = food.missing ?? [];
   const canAdd = per100.kcal !== null && amount > 0;
+  const forShopping = sp.get('to') === 'shopping';
+  // "La mia lista": i prodotti salvati (meta.favoriteFoods) da riusare in altri pasti e nella spesa
+  function toggleSaved() {
+    patchMeta({ favoriteFoods: fav ? meta.favoriteFoods.filter((x) => x !== food.id) : [food.id, ...meta.favoriteFoods] });
+    toast(fav ? 'Rimosso dalla tua lista' : 'Salvato nella tua lista');
+  }
+  function addToShopping() {
+    const extras = meta.shoppingExtra ?? [];
+    if (extras.some((x) => x.foodId === food.id)) toast('Già nella lista della spesa');
+    else {
+      patchMeta({ shoppingExtra: [...extras, { id: uid('x_'), name: food.brand ? `${food.name} · ${food.brand}` : food.name, foodId: food.id }] });
+      toast('Aggiunto alla lista della spesa');
+    }
+    nav('/nutrition/shopping', { replace: true });
+  }
+  const savedIcon = <Bookmark size={20} fill={fav ? 'var(--accent)' : 'none'} color={fav ? 'var(--accent)' : 'currentColor'} />;
 
   const [pickMeal, setPickMeal] = useState(false);
   const [slot, setSlot] = useState<MealSlot>((sp.get('slot') as MealSlot) || defaultSlot());
@@ -187,8 +203,8 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
   return (
     <div className="page stack product-page">
       <PageHeader title="Prodotto" back right={<div className="row" style={{ gap: 6 }}>
-        <button className="icon-btn" onClick={() => { patchMeta({ favoriteFoods: fav ? meta.favoriteFoods.filter((x) => x !== food.id) : [food.id, ...meta.favoriteFoods] }); toast(fav ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti'); }} aria-pressed={fav} aria-label={fav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}>
-          <Heart size={20} fill={fav ? 'var(--accent)' : 'none'} color={fav ? 'var(--accent)' : 'currentColor'} />
+        <button className="icon-btn" onClick={toggleSaved} aria-pressed={fav} aria-label={fav ? 'Rimuovi dalla tua lista' : 'Salva nella tua lista'}>
+          {savedIcon}
         </button>
         <button className="icon-btn" onClick={onEdit} aria-label="Modifica il prodotto"><Pencil size={19} /></button>
       </div>} />
@@ -308,7 +324,10 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
 
       <div className="product-cta">
         <div className="small"><b className="num">{fmtN(amount, 1)} {unit}</b> · <b className="num">{now.kcal === null ? 'n.d.' : `${fmtN(now.kcal)} kcal`}</b></div>
-        <button className="btn primary lg grow" disabled={!canAdd} onClick={() => setPickMeal(true)}>Aggiungi al diario</button>
+        <button className="icon-btn soft" onClick={toggleSaved} aria-pressed={fav} aria-label={fav ? 'Rimuovi dalla tua lista' : 'Salva nella tua lista'} title={fav ? 'Salvato nella tua lista' : 'Salva nella tua lista'}>{savedIcon}</button>
+        {forShopping
+          ? <button className="btn primary lg grow" onClick={addToShopping}>Aggiungi alla spesa</button>
+          : <button className="btn primary lg grow" disabled={!canAdd} onClick={() => setPickMeal(true)}>Aggiungi al diario</button>}
       </div>
 
       <Sheet open={pickMeal} onClose={() => setPickMeal(false)} title="In quale pasto?"
@@ -319,6 +338,11 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
           </div>
           <div className="field"><label htmlFor="pday">Giorno</label><input id="pday" type="date" className="input" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} /></div>
           <div className="small muted">{food.name}: {fmtN(amount, 1)} {unit} · {fmtN(now.kcal ?? 0)} kcal · P {fmtN(now.protein ?? 0, 1)} · C {fmtN(now.carbs ?? 0, 1)} · G {fmtN(now.fat ?? 0, 1)}</div>
+          <button type="button" className="list-item save-to-list" style={{ border: '1px solid var(--line)', borderRadius: 14 }} onClick={toggleSaved} aria-pressed={fav}>
+            <span className={`set-check ${fav ? 'on' : ''}`} style={{ width: 28, height: 28, margin: 0 }}><Check size={15} strokeWidth={3} /></span>
+            <span className="grow" style={{ textAlign: 'left' }}><div className="li-title">Salva nella mia lista</div><div className="li-sub">Lo ritrovi pronto quando aggiungi un alimento o fai la spesa</div></span>
+            {savedIcon}
+          </button>
         </div>
       </Sheet>
 
