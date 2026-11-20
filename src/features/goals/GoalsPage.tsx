@@ -32,7 +32,7 @@ export default function GoalsPage() {
   return (
     <div className="page stack">
       <PageHeader title="Obiettivi e traguardi" back />
-      <div className="grid-2">
+      <div className="grid-2 goals-grid">
         <section className="card col" style={{ alignItems: 'center', gap: 10 }}>
           <Ring value={wk.done} max={wGoal} size={110} stroke={10}><div className="num" style={{ fontSize: 26, fontWeight: 700 }}>{wk.done}<span className="muted" style={{ fontSize: 15 }}>/{wGoal}</span></div></Ring>
           <b className="small">Questa settimana</b>
