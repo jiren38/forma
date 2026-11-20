@@ -27,6 +27,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          # Backend Supabase per account e sincronizzazione tra dispositivi.
+          # URL e chiave "anon" sono pubblici per progetto: i dati sono protetti dalle regole RLS del database.
+          VITE_SUPABASE_URL: https://rerlqjukqfofrkodgura.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlcmxxanVrcWZvZnJrb2RndXJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODU0NjksImV4cCI6MjExMDc2MTQ2OX0.2kJ1ZG9Pq6oPYTcMSaujDwImYowSkoAXZA0db8Q1yLA
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
