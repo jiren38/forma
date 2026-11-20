@@ -50,7 +50,7 @@ function ThemeSync() {
     document.documentElement.dataset.theme = s.theme;
     const meta = document.querySelector('meta[name="theme-color"]');
     const dark = s.theme === 'dark' || (s.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    meta?.setAttribute('content', dark ? '#0a0b0d' : '#f3f4f6');
+    meta?.setAttribute('content', dark ? '#07080a' : '#f3f4f1');
   }, [s.theme]);
   return null;
 }
