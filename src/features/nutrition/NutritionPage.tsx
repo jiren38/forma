@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Copy, Save, BookOpen, CalendarRange, ShoppingCart, Target, Apple, Info, Bookmark, Trash2, ScanBarcode, History } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Copy, Save, BookOpen, CalendarRange, ShoppingCart, Target, Apple, Info, Bookmark, Trash2, ScanBarcode, History, Flame } from 'lucide-react';
 import { unlockAudio } from './scanner/feedback';
 import { useActiveProgram, useDiary, useProfile, useSavedMeals, useSettings } from '@/app/data';
 import { store } from '@/db/store';
@@ -88,6 +88,7 @@ export default function NutritionPage() {
                 <div className="row-between small"><span className="muted">Assunte</span><b className="num">{fmtN(tot.kcal)} kcal</b></div>
                 <div className="row-between small"><span className="muted">Obiettivo</span><b className="num">{fmtN(t.kcal)} kcal</b></div>
                 <Link to="/nutrition/targets" className="tiny muted row" style={{ gap: 4 }}><Info size={12} /> {t.overridden ? 'Obiettivo personalizzato' : 'Stima indicativa'} · dettagli</Link>
+                <Link to={`/energy${isToday ? '' : `?p=day&d=${date}`}`} className="tiny accent row" style={{ gap: 4, fontWeight: 600 }}><Flame size={12} /> Bilancio con gli allenamenti</Link>
               </div>
             </div>
             <div className="stack-sm" style={{ marginTop: 14 }}>

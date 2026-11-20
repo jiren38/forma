@@ -628,3 +628,24 @@ a.card.row, a.card.col { display: flex; }
 .cardio-now .big { font-family: var(--font-display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
 .compare { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 12px; font-size: 13px; align-items: baseline; }
 .compare .h { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ---- Bilancio calorico ---- */
+.period-nav { display: flex; align-items: center; gap: 6px; }
+.period-nav .icon-btn:disabled { opacity: .3; cursor: default; }
+.energy-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
+.energy-totals > div:not(.op) { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.energy-totals .l { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.energy-totals .v { font-size: clamp(19px, 6vw, 26px); font-weight: 750; letter-spacing: -0.03em; line-height: 1.1; }
+.energy-totals .op { color: var(--muted); font-size: 20px; padding-bottom: 3px; }
+.energy-rows { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.energy-ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+.energy-total-row { border-top: 1px solid var(--border); padding-top: 10px; }
+.stack-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-3); gap: 2px; }
+.stack-bar i { display: block; height: 100%; }
+.legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
+.energy-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.energy-mini > div { display: flex; flex-direction: column; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 10px; }
+.energy-mini b { font-size: 19px; }
+.method h4 { margin: 14px 0 2px; color: var(--text); font-size: 14px; }
+.method ul { padding-left: 18px; margin: 4px 0; display: flex; flex-direction: column; gap: 4px; }
+.method .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--surface-2); padding: 8px 10px; border-radius: 10px; color: var(--text); }
