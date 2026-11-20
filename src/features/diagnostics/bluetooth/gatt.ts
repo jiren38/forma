@@ -14,7 +14,11 @@ export function fullUuid(short: number): string {
 
 /** Alias a 16 bit se l'UUID è basato sulla Base UUID del SIG, altrimenti null. */
 export function shortOf(uuid: string): number | null {
-  const u = uuid.toLowerCase();
+  // Chrome restituisce sempre UUID a 128 bit; alcuni browser (es. Bluefy su iPhone) restituiscono
+  // la forma corta "2ad2" o "0x2AD2". Le accettiamo tutte.
+  const u = uuid.trim().toLowerCase().replace(/^0x/, '');
+  if (/^[0-9a-f]{4}$/.test(u)) return parseInt(u, 16);
+  if (/^0000[0-9a-f]{4}$/.test(u)) return parseInt(u.slice(4), 16);
   if (u.length === 36 && u.startsWith('0000') && u.endsWith(BASE_SUFFIX)) return parseInt(u.slice(4, 8), 16);
   return null;
 }

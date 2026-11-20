@@ -13,7 +13,7 @@ import {
   parseUserUuid, serviceName, shortOf,
 } from './gatt';
 import {
-  KIND_LABEL, buildReport, isDataChar, isWritableChar, newDevice, reportMarkdown, verdictLabel,
+  KIND_LABEL, buildReport, detectKind, isDataChar, isWritableChar, newDevice, reportMarkdown, verdictLabel,
   type CharInfo, type DeviceRecord, type LogEntry, type MachineKind, type Verdict,
 } from './report';
 import './bluetooth.css';
@@ -174,6 +174,12 @@ export default function BluetoothDiagnostics() {
           si.error = errText(e);
           log(id, 'error', `Caratteristiche di ${fmtUuid(s.uuid)} non leggibili: ${si.error}`);
         }
+      }
+      const det = detectKind(rec);
+      if (det && det !== rec.kind) {
+        rec.kindCorrectedFrom = rec.kind;
+        rec.kind = det;
+        log(id, 'warn', `Tipo corretto: l’attrezzo trasmette dati da ${det === 'bike' ? 'cyclette (Indoor Bike Data)' : 'tapis roulant (Treadmill Data)'}`);
       }
       if (!rec.services.some((s) => shortOf(s.uuid) === 0x1826)) log(id, 'warn', 'Servizio FTMS (0x1826) non presente tra quelli accessibili');
       else log(id, 'ok', 'Servizio FTMS (0x1826) presente');
