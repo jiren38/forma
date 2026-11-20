@@ -138,6 +138,7 @@ const ROUTES: [RegExp, RouteMeta][] = [
   [/^\/profile\/equipment/, { section: 'profile', crumb: 'Attrezzatura' }],
   [/^\/profile/, { section: 'profile', desc: 'Il tuo account, i dati e le preferenze.' }],
   [/^\/settings/, { section: 'profile', crumb: 'Impostazioni', desc: 'Tema, unità di misura, promemoria e obiettivi.' }],
+  [/^\/diagnostics\/bluetooth/, { section: 'profile', crumb: 'Diagnostica Bluetooth' }],
   [/^\/privacy/, { section: 'profile', crumb: 'Privacy', desc: 'Esporta, importa o elimina i tuoi dati.' }],
   [/^\/explore/, { section: 'explore' }],
 ];

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, Upload, RefreshCw, LogOut, Trash2, Cloud, HardDrive, FileSpreadsheet, Bell, Shield, Import } from 'lucide-react';
+import { Download, Upload, RefreshCw, LogOut, Trash2, Cloud, HardDrive, FileSpreadsheet, Bell, Shield, Import, Bluetooth } from 'lucide-react';
 import { useSettings, patchSettings, useSessions } from '@/app/data';
 import { useAuth } from '@/app/auth';
 import { store, ALL_COLLECTIONS, type CollectionName } from '@/db/store';
@@ -124,6 +124,11 @@ export default function SettingsPage() {
         <Row icon={<Upload size={18} />} title="Ripristina da backup" sub="Unisce i dati del file a quelli attuali"><button className="btn sm" disabled={busy} onClick={() => file.current?.click()}>Importa</button></Row>
         <input ref={file} type="file" accept="application/json,.json" hidden onChange={(e) => importJson(e.target.files?.[0])} />
         <Link to="/privacy" className="list-item"><span className="li-icon"><Shield size={18} /></span><span className="grow"><div className="li-title">Privacy e dati</div></span></Link>
+      </div>
+
+      <div className="section-title">Strumenti sperimentali</div>
+      <div className="settings-group">
+        <Link to="/diagnostics/bluetooth" className="list-item"><span className="li-icon"><Bluetooth size={18} /></span><span className="grow"><div className="li-title">Bluetooth Device Diagnostics</div><div className="li-sub">Verifica in sola lettura cosa espongono cyclette e tapis roulant</div></span></Link>
       </div>
 
       <div className="section-title">Zona sensibile</div>
