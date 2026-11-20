@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Globe, Heart, Clock, BookOpen, Bookmark, PenLine, Search, Loader2, ScanBarcode } from 'lucide-react';
+import { Plus, Globe, Heart, Clock, BookOpen, Bookmark, PenLine, Search, Loader2, ScanBarcode, BookmarkCheck } from 'lucide-react';
 import { useCustomFoods, useMeta, useRecipes, useSavedMeals } from '@/app/data';
 import { store } from '@/db/store';
 import { MEAL_LABEL, MEAL_ORDER } from '@/lib/labels';
@@ -14,7 +14,7 @@ import { OFF_FIELDS, parseOffProduct } from '@/lib/off';
 import { saveOnlineProduct } from './products';
 import { unlockAudio } from './scanner/feedback';
 
-type Tab = 'search' | 'recent' | 'fav' | 'meals' | 'recipes';
+type Tab = 'search' | 'recent' | 'fav' | 'products' | 'meals' | 'recipes';
 
 export default function AddFood() {
   const nav = useNavigate();
@@ -39,6 +39,7 @@ export default function AddFood() {
   const results = useMemo(() => searchFoods(foods, q).slice(0, 80), [foods, q]);
   const recent = meta.recentFoods.map(findFood).filter((f): f is Food => !!f);
   const favs = meta.favoriteFoods.map(findFood).filter((f): f is Food => !!f);
+  const catalog = useMemo(() => custom.filter((f) => f.savedAt).sort((a, b) => a.name.localeCompare(b.name, 'it')), [custom]);
 
   async function searchOnline() {
     const term = q.trim();
@@ -86,6 +87,7 @@ export default function AddFood() {
         <button className={`chip ${tab === 'search' ? 'on' : ''}`} onClick={() => setTab('search')}><Search size={13} /> Database</button>
         <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Recenti</button>
         <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
+        <button className={`chip ${tab === 'products' ? 'on' : ''}`} onClick={() => setTab('products')}><BookmarkCheck size={13} /> Diario prodotti</button>
         <button className={`chip ${tab === 'meals' ? 'on' : ''}`} onClick={() => setTab('meals')}><Bookmark size={13} /> Pasti salvati</button>
         <button className={`chip ${tab === 'recipes' ? 'on' : ''}`} onClick={() => setTab('recipes')}><BookOpen size={13} /> Ricette</button>
       </Chips>
@@ -110,6 +112,7 @@ export default function AddFood() {
       )}
       {tab === 'recent' && (recent.length ? <FoodList foods={recent} onPick={pick} /> : <Empty icon={<Clock />} title="Nessun alimento recente" />)}
       {tab === 'fav' && (favs.length ? <FoodList foods={favs} onPick={pick} /> : <Empty icon={<Heart />} title="Nessun preferito" text="Quando aggiungi un alimento puoi segnarlo come preferito." />)}
+      {tab === 'products' && (catalog.length ? <FoodList foods={catalog} onPick={pick} /> : <Empty icon={<BookmarkCheck />} title="Diario prodotti vuoto" text="Dopo una scansione scegli “Salva nel diario prodotti” per ritrovare qui il prodotto." />)}
       {tab === 'meals' && (saved.length ? (
         <div className="settings-group">
           {saved.map((m) => (

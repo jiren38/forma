@@ -252,6 +252,8 @@ export interface Food {
   /** Prodotto di Open Food Facts corretto dall'utente. */
   editedFromOff?: boolean;
   fetchedAt?: string; scannedAt?: string; scanCount?: number; updatedAt?: string;
+  /** Salvato nel diario prodotti (catalogo personale): non conta nei valori giornalieri. */
+  savedAt?: string;
 }
 
 export type NutrientKey = 'kcal' | 'protein' | 'carbs' | 'sugars' | 'fat' | 'satFat' | 'fiber' | 'salt';

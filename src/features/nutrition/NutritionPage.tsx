@@ -66,7 +66,7 @@ export default function NutritionPage() {
   return (
     <div className="page stack">
       <SectionHero section="nutrition" compact title="Nutrizione" desc="Diario, calorie e macronutrienti. Scansiona un prodotto o cerca un alimento."
-        right={<><Link to={`/nutrition/scanned${isToday ? '' : `?date=${date}`}`} className="icon-btn" aria-label="Prodotti scansionati"><History size={19} /></Link><Link to="/nutrition/targets" className="icon-btn" aria-label="Obiettivi nutrizionali"><Target size={19} /></Link></>}
+        right={<><Link to={`/nutrition/scanned${isToday ? '' : `?date=${date}`}`} className="icon-btn" aria-label="Diario prodotti"><History size={19} /></Link><Link to="/nutrition/targets" className="icon-btn" aria-label="Obiettivi nutrizionali"><Target size={19} /></Link></>}
         actions={<>
           <button className="btn primary" onClick={() => { unlockAudio(); nav(`/nutrition/scan${isToday ? '' : `?date=${date}`}`); }}><ScanBarcode size={19} /> Scansiona</button>
           <Link to={`/nutrition/add?date=${date}`} className="btn"><Search size={17} /> Cerca alimento</Link>

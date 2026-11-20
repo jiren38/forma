@@ -1,15 +1,19 @@
-/** Prodotti scansionati: ultimi, preferiti, più aggiunti, creati da te, con ricerca per nome e marca. */
+/**
+ * Diario prodotti: il catalogo personale dei prodotti salvati (non conta nei valori giornalieri),
+ * più storico delle scansioni, preferiti, più aggiunti e creati da te. Da qui si aggiungono a un pasto o alla lista della spesa.
+ */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ScanBarcode, Clock, Heart, TrendingUp, PenLine, Plus, Package } from 'lucide-react';
+import { ScanBarcode, Clock, Heart, TrendingUp, PenLine, Package, BookmarkCheck, ShoppingCart, Utensils } from 'lucide-react';
 import { useCustomFoods, useDiary, useMeta } from '@/app/data';
-import { PageHeader, SearchInput, Empty, Chips } from '@/components/ui';
+import { PageHeader, SearchInput, Empty, Chips, useToast } from '@/components/ui';
 import { normalize, fmtN, formatShortDate } from '@/lib/util';
 import type { Food } from '@/lib/types';
 import { ProductImage } from './ProductPage';
 import { unlockAudio } from './scanner/feedback';
+import { addProductToShopping } from './products';
 
-type Tab = 'recent' | 'fav' | 'freq' | 'mine';
+type Tab = 'saved' | 'recent' | 'fav' | 'freq' | 'mine';
 
 /** Un solo prodotto per codice: prevale la versione creata o corretta dall'utente. */
 export function useProductsList(): Food[] {
@@ -22,7 +26,7 @@ export function useProductsList(): Food[] {
       if (!cur) { byCode.set(f.barcode, f); continue; }
       const mine = (x: Food) => x.source === 'custom' || !!x.editedFromOff;
       const keep = mine(f) && !mine(cur) ? f : cur;
-      byCode.set(f.barcode, { ...keep, scannedAt: [f.scannedAt, cur.scannedAt].filter(Boolean).sort().pop(), scanCount: (f.scanCount ?? 0) + (cur.scanCount ?? 0) });
+      byCode.set(f.barcode, { ...keep, savedAt: [f.savedAt, cur.savedAt].filter(Boolean).sort().pop(), scannedAt: [f.scannedAt, cur.scannedAt].filter(Boolean).sort().pop(), scanCount: (f.scanCount ?? 0) + (cur.scanCount ?? 0) });
     }
     return [...byCode.values()];
   }, [foods]);
@@ -35,10 +39,12 @@ export default function ScannedProducts() {
   if (sp.get('date')) qs.set('date', sp.get('date')!);
   if (sp.get('slot')) qs.set('slot', sp.get('slot')!);
   const q0 = qs.toString() ? `?${qs}` : '';
+  const forShop = sp.get('to') === 'shopping';
+  const toast = useToast();
   const products = useProductsList();
   const meta = useMeta();
   const diary = useDiary();
-  const [tab, setTab] = useState<Tab>('recent');
+  const [tab, setTab] = useState<Tab>('saved');
   const [q, setQ] = useState('');
 
   const uses = useMemo(() => {
@@ -53,6 +59,7 @@ export default function ScannedProducts() {
       const words = n.split(/\s+/);
       return products.filter((f) => { const h = normalize(`${f.name} ${f.brand ?? ''} ${f.barcode ?? ''}`); return words.every((w) => h.includes(w)); });
     }
+    if (tab === 'saved') return products.filter((f) => f.savedAt).sort((a, b) => a.name.localeCompare(b.name, 'it'));
     if (tab === 'recent') return products.filter((f) => f.scannedAt).sort((a, b) => b.scannedAt!.localeCompare(a.scannedAt!));
     if (tab === 'fav') return meta.favoriteFoods.map((id) => products.find((f) => f.id === id)).filter((f): f is Food => !!f);
     if (tab === 'freq') return products.filter((f) => (uses.get(f.id) ?? 0) > 0).sort((a, b) => (uses.get(b.id) ?? 0) - (uses.get(a.id) ?? 0));
@@ -60,7 +67,13 @@ export default function ScannedProducts() {
   }, [products, tab, q, meta.favoriteFoods, uses]);
 
   const open = (f: Food) => nav(`/nutrition/product/${f.barcode}${q0}`);
+  async function toShop(f: Food) {
+    const ok = await addProductToShopping(f);
+    toast(ok ? `${f.name} aggiunto alla lista della spesa` : `${f.name} è già nella lista della spesa`);
+  }
+  const savedCount = products.filter((f) => f.savedAt).length;
   const empty: Record<Tab, { icon: JSX.Element; title: string; text: string }> = {
+    saved: { icon: <BookmarkCheck />, title: 'Diario prodotti vuoto', text: 'Dopo una scansione tocca “Salva nel diario prodotti”: il prodotto resta qui senza contare nei valori di oggi, pronto da aggiungere a un pasto o alla lista della spesa.' },
     recent: { icon: <Clock />, title: 'Nessun prodotto scansionato', text: 'Scansiona il codice a barre di una confezione: lo ritroverai qui, pronto da aggiungere al diario.' },
     fav: { icon: <Heart />, title: 'Nessun prodotto preferito', text: 'Nella scheda di un prodotto tocca il cuore per averlo sempre a portata di mano.' },
     freq: { icon: <TrendingUp />, title: 'Ancora nessun prodotto frequente', text: 'Qui compaiono i prodotti che aggiungi più spesso al diario.' },
@@ -69,12 +82,14 @@ export default function ScannedProducts() {
 
   return (
     <div className="page stack">
-      <PageHeader title="Prodotti scansionati" back sub={`${products.length} ${products.length === 1 ? 'prodotto' : 'prodotti'} sul tuo account`} />
-      <button className="btn primary lg block" onClick={() => { unlockAudio(); nav(`/nutrition/scan${q0}`); }}><ScanBarcode size={20} /> Scansiona prodotto</button>
+      <PageHeader title="Diario prodotti" back sub={`${savedCount} ${savedCount === 1 ? 'prodotto salvato' : 'prodotti salvati'} · non contano nei valori giornalieri`} />
+      <button className="btn primary lg block" onClick={() => { unlockAudio(); nav(`/nutrition/scan${forShop ? '?to=shopping' : q0}`); }}><ScanBarcode size={20} /> Scansiona prodotto</button>
+      {forShop && <p className="small muted">Tocca il carrello per aggiungere un prodotto alla lista della spesa.</p>}
       <SearchInput value={q} onChange={setQ} placeholder="Cerca per nome, marca o codice" />
       {!q && (
         <Chips>
-          <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Ultimi</button>
+          <button className={`chip ${tab === 'saved' ? 'on' : ''}`} onClick={() => setTab('saved')}><BookmarkCheck size={13} /> Salvati</button>
+          <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Scansionati</button>
           <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
           <button className={`chip ${tab === 'freq' ? 'on' : ''}`} onClick={() => setTab('freq')}><TrendingUp size={13} /> Più aggiunti</button>
           <button className={`chip ${tab === 'mine' ? 'on' : ''}`} onClick={() => setTab('mine')}><PenLine size={13} /> Creati da te</button>
@@ -94,15 +109,23 @@ export default function ScannedProducts() {
                     {f.brand ? `${f.brand} · ` : ''}{(f.missing ?? []).includes('kcal') ? 'kcal n.d.' : `${fmtN(f.kcal)} kcal/100 ${f.unit ?? 'g'}`}
                     {tab === 'freq' && !q ? ` · aggiunto ${uses.get(f.id)} ${uses.get(f.id) === 1 ? 'volta' : 'volte'}` : tab === 'recent' && !q && f.scannedAt ? ` · ${formatShortDate(f.scannedAt)}` : ''}
                   </div>
-                  {(f.source === 'custom' || f.editedFromOff) && <span className="pill accent" style={{ marginTop: 4 }}>{f.editedFromOff ? 'Corretto da te' : 'Creato da te'}</span>}
+                  {((f.savedAt && tab !== 'saved') || f.source === 'custom' || f.editedFromOff) && (
+                    <span className="row wrap" style={{ gap: 4, marginTop: 4 }}>
+                      {f.savedAt && tab !== 'saved' && <span className="pill">Nel diario</span>}
+                      {(f.source === 'custom' || f.editedFromOff) && <span className="pill accent">{f.editedFromOff ? 'Corretto da te' : 'Creato da te'}</span>}
+                    </span>
+                  )}
                 </span>
               </button>
-              <Link className="icon-btn soft" to={`/nutrition/product/${f.barcode}${q0}`} aria-label={`Aggiungi ${f.name} al diario`}><Plus size={18} /></Link>
+              <span className="product-row-actions">
+                <Link className="icon-btn soft" to={`/nutrition/product/${f.barcode}${q0}`} aria-label={`Aggiungi ${f.name} a un pasto`} title="Aggiungi a un pasto"><Utensils size={17} /></Link>
+                <button className={`icon-btn ${forShop ? 'primary' : 'soft'}`} onClick={() => toShop(f)} aria-label={`Aggiungi ${f.name} alla lista della spesa`} title="Aggiungi alla lista della spesa"><ShoppingCart size={17} /></button>
+              </span>
             </div>
           ))}
         </div>
       )}
-      {products.length > 0 && <p className="tiny muted row" style={{ gap: 6 }}><Package size={13} /> I prodotti consultati restano disponibili anche offline e si sincronizzano tra i tuoi dispositivi.</p>}
+      {products.length > 0 && <p className="tiny muted row" style={{ gap: 6 }}><Package size={13} /> I prodotti salvati e consultati restano disponibili anche offline e si sincronizzano tra i tuoi dispositivi.</p>}
     </div>
   );
 }

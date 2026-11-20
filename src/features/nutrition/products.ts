@@ -3,7 +3,7 @@
  * salvataggio senza duplicati, calcolo dei valori per la quantità consumata e aggiunta al diario.
  */
 import { store } from '@/db/store';
-import { pushRecentFood } from '@/app/data';
+import { pushRecentFood, patchMeta, type Meta, type ShoppingExtra } from '@/app/data';
 import { canonicalCode, lookupVariants, type BarcodeFormat } from '@/lib/barcode';
 import { fetchOffProduct } from '@/lib/off';
 import { uid } from '@/lib/util';
@@ -108,7 +108,7 @@ export function lookupProduct(code: string, opts: { format?: BarcodeFormat; forc
 export async function saveOnlineProduct(f: Food): Promise<Food> {
   const cur = store.get<Food>('foods', f.id);
   if (cur?.editedFromOff) return cur; // la versione corretta dall'utente ha la precedenza
-  const next: Food = { ...f, scannedAt: cur?.scannedAt, scanCount: cur?.scanCount, updatedAt: new Date().toISOString() };
+  const next: Food = { ...f, scannedAt: cur?.scannedAt, scanCount: cur?.scanCount, savedAt: cur?.savedAt, updatedAt: new Date().toISOString() };
   return store.put('foods', f.id, next);
 }
 
@@ -128,8 +128,31 @@ export async function saveCustomProduct(f: Food, base?: Food): Promise<Food> {
     ...prev, ...f, id, barcode: code, custom: true,
     source: fromOff ? 'openfoodfacts' : 'custom', editedFromOff: fromOff || prev?.editedFromOff || undefined,
     scannedAt: prev?.scannedAt ?? f.scannedAt, scanCount: prev?.scanCount ?? f.scanCount, updatedAt: new Date().toISOString(),
+    // un prodotto inserito a mano finisce subito nel diario prodotti
+    savedAt: prev?.savedAt ?? base?.savedAt ?? (fromOff ? undefined : new Date().toISOString()),
   };
+  if (!next.savedAt) delete next.savedAt;
   return store.put('foods', id, next);
+}
+
+// ---------------------------------------------------------------- diario prodotti
+/** Salva (o toglie) il prodotto dal diario prodotti. Non crea voci nel diario alimentare. */
+export async function setInCatalog(f: Food, on: boolean): Promise<Food> {
+  const cur = store.get<Food>('foods', f.id) ?? f;
+  const next: Food = { ...cur, savedAt: on ? cur.savedAt ?? new Date().toISOString() : undefined };
+  if (!on) delete next.savedAt;
+  return store.put('foods', f.id, next);
+}
+
+// ---------------------------------------------------------------- lista della spesa
+/** Aggiunge il prodotto agli articoli della lista della spesa. false se c'era già. */
+export async function addProductToShopping(f: Food): Promise<boolean> {
+  const m = (store.get<Meta>('meta', 'me') ?? {}) as Partial<Meta>;
+  const extras = m.shoppingExtra ?? [];
+  if (extras.some((x) => x.foodId === f.id || (f.barcode && x.foodId && store.get<Food>('foods', x.foodId)?.barcode === f.barcode))) return false;
+  const item: ShoppingExtra = { id: uid('x_'), name: f.name, foodId: f.id, ...(f.brand ? { brand: f.brand } : {}), ...(f.imageUrl && !f.imageUrl.startsWith('data:') ? { imageUrl: f.imageUrl } : {}) };
+  await patchMeta({ shoppingExtra: [...extras, item] });
+  return true;
 }
 
 // ---------------------------------------------------------------- diario

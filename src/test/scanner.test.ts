@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { canonicalCode, gtinCheckDigit, isValidGtin, lookupVariants, manualCodeProblem, upcEtoUpcA } from '@/lib/barcode';
 import { parseOffProduct, parseQuantity, fetchOffProduct } from '@/lib/off';
-import { per100Of, scaleNutrients, portionOptions, lookupProduct, addProductToDiary, saveCustomProduct, localProduct, recordScan } from '@/features/nutrition/products';
+import { per100Of, scaleNutrients, portionOptions, lookupProduct, addProductToDiary, saveCustomProduct, localProduct, recordScan, setInCatalog, addProductToShopping, saveOnlineProduct } from '@/features/nutrition/products';
 import { store } from '@/db/store';
 import type { Food } from '@/lib/types';
 import { EanUpcReader, upcEDigitsToUpcA } from '@/features/nutrition/scanner/upce';
@@ -187,5 +187,31 @@ describe('ricerca, salvataggio e diario', () => {
     await saveCustomProduct({ ...base, name: 'Nutella (corretta)' }, base);
     await lookupProduct('3017620422003', { force: true, fetchImpl: fakeFetch({ '3017620422003': NUTELLA }) });
     expect(localProduct('3017620422003')).toMatchObject({ name: 'Nutella (corretta)', editedFromOff: true, source: 'openfoodfacts' });
+  });
+
+  it('il diario prodotti non tocca il diario alimentare e sopravvive agli aggiornamenti', async () => {
+    const diaryBefore = store.list('diary').length;
+    const milk = localProduct('8000000000019')!;
+    await setInCatalog(milk, true);
+    expect(localProduct('8000000000019')?.savedAt).toBeTruthy();
+    expect(store.list('diary')).toHaveLength(diaryBefore);
+    await saveOnlineProduct({ ...milk, savedAt: undefined, name: 'Latte aggiornato' });
+    expect(localProduct('8000000000019')).toMatchObject({ name: 'Latte aggiornato' });
+    expect(localProduct('8000000000019')?.savedAt).toBeTruthy();
+    await setInCatalog(localProduct('8000000000019')!, false);
+    expect(localProduct('8000000000019')?.savedAt).toBeUndefined();
+  });
+
+  it('un prodotto inserito a mano finisce nel diario prodotti', () => {
+    expect(localProduct('8000000000033')?.savedAt).toBeTruthy();
+  });
+
+  it('aggiunge un prodotto alla lista della spesa una sola volta', async () => {
+    const milk = localProduct('8000000000019')!;
+    expect(await addProductToShopping(milk)).toBe(true);
+    expect(await addProductToShopping(milk)).toBe(false);
+    const extras = (store.get<any>('meta', 'me')?.shoppingExtra ?? []).filter((x: any) => x.foodId === milk.id);
+    expect(extras).toHaveLength(1);
+    expect(extras[0]).toMatchObject({ name: milk.name, foodId: milk.id });
   });
 });
