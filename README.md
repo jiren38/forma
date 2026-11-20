@@ -113,7 +113,7 @@ Ti servono: **un account Supabase** (piano gratuito sufficiente per iniziare) e,
    VITE_SUPABASE_ANON_KEY=<anon key>
    ```
 4. *Authentication → URL Configuration*: imposta il dominio su cui pubblicherai l'app (Site URL e Redirect URLs).
-5. **Google (facoltativo)**: crea un OAuth Client ID su Google Cloud Console, con redirect `https://<progetto>.supabase.co/auth/v1/callback`. Poi inserisci Client ID e Secret in *Authentication → Providers → Google*.
+5. **Google (facoltativo)**: imposta `VITE_GOOGLE_LOGIN=1` nella build per mostrare il pulsante, poi crea un OAuth Client ID su Google Cloud Console, con redirect `https://<progetto>.supabase.co/auth/v1/callback`. Poi inserisci Client ID e Secret in *Authentication → Providers → Google*.
 6. **Edge Functions** (con la Supabase CLI):
    ```bash
    supabase login
