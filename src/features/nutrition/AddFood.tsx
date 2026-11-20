@@ -6,7 +6,7 @@ import { store } from '@/db/store';
 import { MEAL_LABEL, MEAL_ORDER } from '@/lib/labels';
 import { dayKey, fmtN, fromKey, uid } from '@/lib/util';
 import { totals } from '@/lib/nutrition';
-import { PageHeader, SearchInput, Empty, Sheet, NumberInput, Stepper, useToast } from '@/components/ui';
+import { PageHeader, SearchInput, Empty, Sheet, NumberInput, Stepper, useToast, Chips } from '@/components/ui';
 import { MacroLine, QuantitySheet, addRecipeEntry, allFoods, defaultSlot, findFood, recipePer100, searchFoods } from './common';
 import type { DiaryEntry, Food, MealSlot, Recipe } from '@/lib/types';
 import { canonicalCode } from '@/lib/barcode';
@@ -82,13 +82,13 @@ export default function AddFood() {
         <div className="grow"><SearchInput value={q} onChange={(v) => { setQ(v); setTab('search'); setOff(null); }} placeholder="Cerca alimento o codice a barre" autoFocus /></div>
         <button className="icon-btn scan-icon" onClick={() => { unlockAudio(); nav(`/nutrition/scan?date=${date}&slot=${slot}`); }} aria-label="Scansiona il codice a barre" title="Scansiona il codice a barre"><ScanBarcode size={21} /></button>
       </div>
-      <div className="chips">
+      <Chips>
         <button className={`chip ${tab === 'search' ? 'on' : ''}`} onClick={() => setTab('search')}><Search size={13} /> Database</button>
         <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Recenti</button>
         <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
         <button className={`chip ${tab === 'meals' ? 'on' : ''}`} onClick={() => setTab('meals')}><Bookmark size={13} /> Pasti salvati</button>
         <button className={`chip ${tab === 'recipes' ? 'on' : ''}`} onClick={() => setTab('recipes')}><BookOpen size={13} /> Ricette</button>
-      </div>
+      </Chips>
       <div className="row wrap" style={{ gap: 8 }}>
         <button className="btn sm" onClick={() => setManual(true)}><PenLine size={15} /> Inserimento rapido</button>
         <Link to="/nutrition/foods?new=1" className="btn sm"><Plus size={15} /> Crea alimento</Link>

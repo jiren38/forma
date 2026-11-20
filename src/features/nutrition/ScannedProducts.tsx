@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ScanBarcode, Clock, Heart, TrendingUp, PenLine, Plus, Package } from 'lucide-react';
 import { useCustomFoods, useDiary, useMeta } from '@/app/data';
-import { PageHeader, SearchInput, Empty } from '@/components/ui';
+import { PageHeader, SearchInput, Empty, Chips } from '@/components/ui';
 import { normalize, fmtN, formatShortDate } from '@/lib/util';
 import type { Food } from '@/lib/types';
 import { ProductImage } from './ProductPage';
@@ -73,12 +73,12 @@ export default function ScannedProducts() {
       <button className="btn primary lg block" onClick={() => { unlockAudio(); nav(`/nutrition/scan${q0}`); }}><ScanBarcode size={20} /> Scansiona prodotto</button>
       <SearchInput value={q} onChange={setQ} placeholder="Cerca per nome, marca o codice" />
       {!q && (
-        <div className="chips">
+        <Chips>
           <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Ultimi</button>
           <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
           <button className={`chip ${tab === 'freq' ? 'on' : ''}`} onClick={() => setTab('freq')}><TrendingUp size={13} /> Più aggiunti</button>
           <button className={`chip ${tab === 'mine' ? 'on' : ''}`} onClick={() => setTab('mine')}><PenLine size={13} /> Creati da te</button>
-        </div>
+        </Chips>
       )}
       {list.length === 0 ? (
         q ? <p className="small muted">Nessun prodotto per “{q}”.</p> : <Empty icon={empty[tab].icon} title={empty[tab].title} text={empty[tab].text} />

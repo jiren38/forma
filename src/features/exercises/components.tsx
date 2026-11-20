@@ -5,7 +5,7 @@ import { ExerciseVisual } from './media';
 import { CATEGORY_LABEL, CATEGORY_ORDER, EXERCISES, inCategory, isAvailable, type ExCategory, type Exercise } from '@/data/exercises';
 import { MUSCLE_LABEL, EQUIPMENT_LABEL } from '@/lib/labels';
 import { normalize } from '@/lib/util';
-import { Sheet, SearchInput, Empty } from '@/components/ui';
+import { Sheet, SearchInput, Empty, Chips } from '@/components/ui';
 import { useMeta, useProfile } from '@/app/data';
 import { availableEquipment } from '@/lib/generator';
 
@@ -83,11 +83,11 @@ export function ExercisePicker({ open, onClose, onPick, multi, title = 'Aggiungi
       footer={multi ? <button className="btn primary block lg" disabled={!sel.length} onClick={() => { onPick(sel); close(); }}><Plus size={18} /> Aggiungi {sel.length || ''} {sel.length === 1 ? 'esercizio' : 'esercizi'}</button> : undefined}>
       <div className="stack-sm">
         <SearchInput value={q} onChange={setQ} placeholder="Cerca per nome, muscolo o attrezzo" />
-        <div className="chips">
+        <Chips>
           <button className={`chip ${cat === 'all' ? 'on' : ''}`} onClick={() => setCat('all')}>Tutti</button>
           <button className={`chip ${cat === 'fav' ? 'on' : ''}`} onClick={() => setCat('fav')}><Heart size={13} /> Preferiti</button>
           {CATEGORY_ORDER.map((c) => <button key={c} className={`chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{CATEGORY_LABEL[c]}</button>)}
-        </div>
+        </Chips>
         <label className="row small text-2" style={{ gap: 8, cursor: 'pointer' }}>
           <input type="checkbox" checked={onlyAvail} onChange={(e) => setOnlyAvail(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
           Solo esercizi eseguibili con la mia attrezzatura

@@ -8,7 +8,7 @@ import { useAuth } from '@/app/auth';
 import { store } from '@/db/store';
 import { supabase } from '@/db/supabase';
 import { buildContext, localCoachReply, type CoachData } from '@/lib/coach-local';
-import { PageHeader, Confirm, useToast } from '@/components/ui';
+import { PageHeader, Confirm, useToast, Chips } from '@/components/ui';
 import { getExercise } from '@/data/exercises';
 import { uid } from '@/lib/util';
 import type { ChatMessage, ChatThread, Suggestion, WorkoutTemplate } from '@/lib/types';
@@ -148,9 +148,9 @@ export default function CoachPage() {
         <div ref={end} />
       </div>
 
-      <div className="chips" style={{ marginBottom: 6 }}>
+      <Chips style={{ marginBottom: 6 }}>
         {PROMPTS.map((p) => <button key={p} className="chip" disabled={busy} onClick={() => ask(p)}>{p}</button>)}
-      </div>
+      </Chips>
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); ask(input); }}>
         <input className="input grow" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Es. alternative allo squat con bilanciere" aria-label="Messaggio per il coach" maxLength={1000} />
         <button className="btn primary" type="submit" disabled={busy || !input.trim()} aria-label="Invia"><Send size={18} /></button>
