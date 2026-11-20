@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, CheckCircle2, Search, X, AlertTriangle, Info } from 'lucide-react';
+import { ArrowLeft, Check, CheckCircle2, ChevronLeft, ChevronRight, Search, X, AlertTriangle, Info } from 'lucide-react';
 
 // ---------------- Toast ----------------
 type Toast = { id: number; text: string; kind: 'info' | 'success' | 'error' };
@@ -213,4 +213,102 @@ export function MacroBar({ label, value, max, color, unit = 'g' }: { label: stri
 
 export function Loading({ label = 'Caricamento…' }: { label?: string }) {
   return <div className="full-center"><div className="col" style={{ alignItems: 'center' }}><div className="spinner" /><span className="muted small">{label}</span></div></div>;
+}
+
+// ---------------- Chips scorrevoli ----------------
+/**
+ * Riga di chip orizzontale scorrevole su ogni dispositivo:
+ * touch (swipe nativo), rotellina del mouse (verticale → orizzontale),
+ * trascinamento col mouse, frecce ai bordi su desktop e sfumatura dove c'è altro contenuto.
+ * La chip selezionata (.on) viene portata in vista automaticamente.
+ */
+export function Chips({ children, className = '', style, ...rest }: { children: ReactNode; className?: string; style?: CSSProperties; role?: string; 'aria-label'?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const drag = useRef<{ x: number; start: number; moved: boolean; id: number } | null>(null);
+  const suppressClick = useRef(false);
+  const lastOn = useRef<HTMLElement | null>(null);
+
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const left = el.scrollLeft > 2;
+    const right = el.scrollLeft < max - 2;
+    setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    update();
+    const onWheel = (ev: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      const d = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+      if (!d) return;
+      const max = el.scrollWidth - el.clientWidth;
+      // Ai bordi lascia scorrere la pagina/il pannello.
+      if ((d < 0 && el.scrollLeft <= 0) || (d > 0 && el.scrollLeft >= max - 1)) return;
+      ev.preventDefault();
+      el.scrollLeft += ev.deltaMode === 1 ? d * 32 : d;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    ro?.observe(el);
+    return () => { el.removeEventListener('wheel', onWheel); el.removeEventListener('scroll', update); ro?.disconnect(); };
+  }, [update]);
+
+  // Porta in vista la chip attiva (solo in orizzontale, senza muovere la pagina).
+  useEffect(() => {
+    const el = ref.current;
+    const on = el?.querySelector<HTMLElement>('.chip.on');
+    if (!el || !on || on === lastOn.current) return;
+    lastOn.current = on;
+    const a = on.offsetLeft - el.offsetLeft;
+    const pad = 40;
+    if (a < el.scrollLeft + pad) el.scrollLeft = Math.max(0, a - pad);
+    else if (a + on.offsetWidth > el.scrollLeft + el.clientWidth - pad) el.scrollLeft = a + on.offsetWidth - el.clientWidth + pad;
+    update();
+  });
+
+  const by = (dir: 1 | -1) => {
+    const el = ref.current;
+    if (el) el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.7), behavior: 'smooth' });
+  };
+
+  const onPointerDown = (e: RPointerEvent) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !ref.current) return;
+    drag.current = { x: e.clientX, start: ref.current.scrollLeft, moved: false, id: e.pointerId };
+  };
+  const onPointerMove = (e: RPointerEvent) => {
+    const d = drag.current;
+    const el = ref.current;
+    if (!d || !el) return;
+    const dx = e.clientX - d.x;
+    if (!d.moved && Math.abs(dx) > 5) { d.moved = true; el.setPointerCapture?.(d.id); el.classList.add('dragging'); }
+    if (d.moved) el.scrollLeft = d.start - dx;
+  };
+  const endDrag = () => {
+    const d = drag.current;
+    const el = ref.current;
+    drag.current = null;
+    if (!d?.moved || !el) return;
+    el.classList.remove('dragging');
+    try { el.releasePointerCapture?.(d.id); } catch { /* già rilasciato */ }
+    suppressClick.current = true;
+    setTimeout(() => { suppressClick.current = false; }, 0);
+  };
+
+  return (
+    <div className={`chips-scroll ${edges.left ? 'fade-l' : ''} ${edges.right ? 'fade-r' : ''}`} style={style}>
+      <div ref={ref} className={`chips ${className}`} {...rest}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
+        onClickCapture={(e) => { if (suppressClick.current) { e.stopPropagation(); e.preventDefault(); } }}>
+        {children}
+      </div>
+      {edges.left && <button type="button" className="chips-arrow left" tabIndex={-1} aria-label="Scorri a sinistra" onClick={() => by(-1)}><ChevronLeft size={18} /></button>}
+      {edges.right && <button type="button" className="chips-arrow right" tabIndex={-1} aria-label="Scorri a destra" onClick={() => by(1)}><ChevronRight size={18} /></button>}
+    </div>
+  );
 }

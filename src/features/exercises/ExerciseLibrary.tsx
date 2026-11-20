@@ -5,7 +5,7 @@ import { CATEGORY_LABEL, CATEGORY_ORDER, EXERCISES, KIND_LABEL, MOVEMENT_LABEL, 
 import { EQUIPMENT_LABEL, MUSCLE_LABEL } from '@/lib/labels';
 import { useMeta, useProfile, toggleFavorite } from '@/app/data';
 import { availableEquipment } from '@/lib/generator';
-import { PageHeader, SearchInput, Sheet, Empty } from '@/components/ui';
+import { PageHeader, SearchInput, Sheet, Empty, Chips } from '@/components/ui';
 import { ExerciseRow, searchExercises } from './components';
 import type { Equipment, MuscleGroup } from '@/lib/types';
 
@@ -57,12 +57,12 @@ export default function ExerciseLibrary() {
         <div className="grow"><SearchInput value={q} onChange={(v) => { setQ(v); setLimit(40); }} placeholder="Cerca: panca, squat, glutei, manubri…" /></div>
         <button className={`btn ${nFilters ? 'soft' : ''}`} onClick={() => setFiltersOpen(true)} aria-label="Filtri"><SlidersHorizontal size={18} />{nFilters ? ` ${nFilters}` : ''}</button>
       </div>
-      <div className="chips" role="tablist" aria-label="Categorie">
+      <Chips role="tablist" aria-label="Categorie">
         <button className={`chip ${cat === 'all' ? 'on' : ''}`} onClick={() => setCat('all')}>Tutti</button>
         <button className={`chip ${cat === 'fav' ? 'on' : ''}`} onClick={() => setCat('fav')}><Heart size={13} /> Preferiti {meta.favorites.length ? `(${meta.favorites.length})` : ''}</button>
         <button className={`chip ${cat === 'recent' ? 'on' : ''}`} onClick={() => setCat('recent')}><Clock size={13} /> Recenti</button>
         {CATEGORY_ORDER.map((c) => <button key={c} className={`chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{CATEGORY_LABEL[c]}</button>)}
-      </div>
+      </Chips>
       {nFilters > 0 && (
         <div className="row wrap" style={{ gap: 6 }}>
           {f.onlyAvailable && <button className="pill accent" onClick={() => setF({ ...f, onlyAvailable: false })}>Con la mia attrezzatura <X size={12} /></button>}
