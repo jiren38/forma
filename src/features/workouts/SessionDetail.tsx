@@ -13,6 +13,9 @@ import { activeSession, startSession, exerciseLogFor, saveSession } from './sess
 import { sessionCardioStats, templateCardio } from '@/lib/cardio';
 import { CardioIcon } from './cardio-ui';
 import { PlannedVsActual } from './CardioLive';
+import { useMeasurements, useProfile } from '@/app/data';
+import { sessionEnergy, weightResolver } from '@/lib/energy';
+import { dayKey } from '@/lib/util';
 
 function prText(kind: string, value: number, reps: number | undefined, units: 'kg' | 'lb') {
   if (kind === 'weight') return `${fmtW(value, units)} × ${reps}`;
@@ -38,6 +41,8 @@ export default function SessionDetail() {
   const settings = useSettings();
   const units = settings.units;
   const [del, setDel] = useState(false);
+  const profile = useProfile();
+  const measurements = useMeasurements();
 
   if (!s) return <div className="page"><PageHeader title="Allenamento" back="/history" /><Empty icon={<Info />} title="Allenamento non trovato" action={<Link className="btn" to="/history">Vai allo storico</Link>} /></div>;
   const st = sessionStats(s);
@@ -50,6 +55,7 @@ export default function SessionDetail() {
   const strengthLogs = s.exercises.filter((e) => !e.cardio);
   const cardioLogs = s.exercises.filter((e) => e.cardio?.done && e.cardio.actual);
   const justDone = sp.get('done') === '1';
+  const energy = profile && s.status === 'completed' ? sessionEnergy(s, weightResolver(measurements, profile.weightKg)(dayKey(s.startedAt))) : null;
 
   async function saveAsTemplate() {
     const now = new Date().toISOString();
@@ -99,6 +105,15 @@ export default function SessionDetail() {
       )}
 
       <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Clock size={13} /> Durata totale</span><span className="v">{formatDuration(st.durationMs)}</span><Delta cur={st.durationMs / 60000} prev={pst && pst.durationMs / 60000} fmt={(n) => `${Math.round(n)} min`} /></div></div>
+      {energy && energy.kcal > 0 && (
+        <Link to={`/energy?p=day&d=${energy.date}`} className="card clickable" aria-label="Calorie stimate dell'allenamento">
+          <div className="row-between"><span className="row small" style={{ gap: 6, fontWeight: 650 }}><Flame size={16} color="var(--orange)" /> Calorie bruciate (stima)</span><b className="num" style={{ fontSize: 22 }}>~{fmtN(energy.kcal)} kcal</b></div>
+          <div className="stack-sm tiny muted" style={{ marginTop: 8 }}>
+            {energy.parts.map((p, i) => <div key={i} className="row-between"><span>{p.label} · {fmtN(p.minutes)} min · {fmtN(p.met, 1)} MET</span><span className="num">{fmtN(p.kcal)} kcal</span></div>)}
+            <div>{fmtN(energy.netKcal)} kcal in più rispetto al riposo{energy.intensityWhy ? ` · intensità: ${energy.intensityWhy}` : ''}{energy.capped ? ` · sessione rimasta aperta ${fmtN(energy.elapsedMin)} min, contati ${fmtN(energy.minutes)}` : ''}. <span className="accent">Bilancio del giorno</span></div>
+          </div>
+        </Link>
+      )}
       {st.sets > 0 && <div className="group-label"><Dumbbell size={13} /> Parte muscolare</div>}
       {st.sets > 0 && <div className="grid-2">
         <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Dumbbell size={13} /> Esercizi</span><span className="v">{st.exercises}</span></div></div>

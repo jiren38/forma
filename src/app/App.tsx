@@ -31,6 +31,7 @@ const MyFoodsPage = lazy(() => import('@/features/nutrition/MyFoodsPage'));
 const ScannerPage = lazy(() => import('@/features/nutrition/ScannerPage'));
 const ProductPage = lazy(() => import('@/features/nutrition/ProductPage'));
 const ScannedProducts = lazy(() => import('@/features/nutrition/ScannedProducts'));
+const EnergyPage = lazy(() => import('@/features/energy/EnergyPage'));
 const BodyPage = lazy(() => import('@/features/body/BodyPage'));
 const CardioPage = lazy(() => import('@/features/cardio/CardioPage'));
 const WellnessPage = lazy(() => import('@/features/wellness/WellnessPage'));
@@ -102,6 +103,7 @@ function Shell() {
             <Route path="/nutrition/scan" element={<ScannerPage />} />
             <Route path="/nutrition/product/:code" element={<ProductPage />} />
             <Route path="/nutrition/scanned" element={<ScannedProducts />} />
+            <Route path="/energy" element={<EnergyPage />} />
             <Route path="/body" element={<BodyPage />} />
             <Route path="/cardio" element={<CardioPage />} />
             <Route path="/wellness" element={<WellnessPage />} />

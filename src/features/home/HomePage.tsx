@@ -16,6 +16,7 @@ import { getExercise } from '@/data/exercises';
 import { activeSession, startSession } from '@/features/workouts/session';
 import { store } from '@/db/store';
 import { SyncBadge } from '@/components/sync-badge';
+import { EnergyCard } from '@/features/energy/EnergyCard';
 
 function greeting() {
   const h = new Date().getHours();
@@ -230,6 +231,8 @@ export default function HomePage() {
             </div>
             <div className="row-between small" style={{ marginTop: 12 }}><span className="muted">Assunte <b className="num" style={{ color: 'var(--text)' }}>{fmtN(todayFood.kcal)}</b> di {fmtN(targets.kcal)} kcal</span><span className="accent" style={{ fontWeight: 600 }}>+ Aggiungi</span></div>
           </Link>
+
+          <EnergyCard />
 
           {/* Peso */}
           <Link to="/body" className="card clickable" aria-label="Peso e andamento">
