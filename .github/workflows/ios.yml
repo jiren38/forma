@@ -63,6 +63,15 @@ jobs:
           mkdir -p out/Payload
           cp -R build/Build/Products/Release-iphoneos/App.app out/Payload/
           cd out && zip -qry Forma.ipa Payload && ls -lh Forma.ipa
+      - name: Controlla il contenuto dell'app
+        run: |
+          APP=out/Payload/App.app
+          test -f "$APP/public/index.html" || { echo "Manca la build web in public/"; exit 1; }
+          test -f "$APP/capacitor.config.json" || { echo "Manca capacitor.config.json"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          grep -c "rerlqjukqfofrkodgura" "$APP"/public/assets/*.js | grep -v ':0' || { echo "Supabase non configurato nella build"; exit 1; }
+          du -sh "$APP" "$APP/public"
       - uses: actions/upload-artifact@v4
         with:
           name: Forma-ipa
