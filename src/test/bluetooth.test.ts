@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decodeIndoorBikeData, decodeTreadmillData, parseMachineFeature, decodeValue, fmtUuid, fullUuid, parseUserUuid, shortOf, isControlPoint, STANDARD_SERVICE_UUIDS } from '@/features/diagnostics/bluetooth/gatt';
-import { buildReport, newDevice } from '@/features/diagnostics/bluetooth/report';
+import { buildReport, detectKind, newDevice } from '@/features/diagnostics/bluetooth/report';
 
 const dv = (bytes: number[]) => new DataView(new Uint8Array(bytes).buffer);
 const u16 = (n: number) => [n & 0xff, (n >> 8) & 0xff];
@@ -111,5 +111,28 @@ describe('Rapporto', () => {
     expect(cmd.verdict).toBe('si');
     expect(cmd.lines.join(' ')).toContain('Regolazione resistenza: DICHIARATA');
     expect(r.find((i) => i.title === 'Controllo remoto verificato')!.verdict).toBe('non-verificato');
+  });
+});
+
+describe('UUID in forma corta (Bluefy su iPhone)', () => {
+  it('riconosce 1826 / 2ad2 / 0x2ACC e decodifica il pacchetto reale della JK 564', () => {
+    expect(shortOf('1826')).toBe(0x1826);
+    expect(shortOf('0x2ACC')).toBe(0x2acc);
+    expect(shortOf('02f00000-0000-0000-0000-00000000fe00')).toBeNull();
+    // Pacchetto ricevuto dall'utente il 2026-11-20 da "iConsole+0006"
+    const bytes = 'fe 1f 00 00 00 00 00 00 00 00 2e 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 8d 00 00 00'.split(' ').map((h) => parseInt(h, 16));
+    const d = decodeValue('2ad2', dv(bytes))!;
+    expect(val(d, 'speed')).toBe(0);
+    expect(val(d, 'distance')).toBe(46);
+    expect(val(d, 'resistance')).toBe(1);
+    expect(val(d, 'elapsed')).toBe(141);
+  });
+  it('rapporto: FTMS presente e tipo dedotto cyclette anche con UUID corti', () => {
+    const d = newDevice('x', 'iConsole+0006', 'treadmill', false, 'test');
+    d.everConnected = true;
+    d.services = [{ uuid: '1826', name: null, chars: [{ uuid: '2ad2', serviceUuid: '1826', name: null, props: ['notify'], notifications: 1 }] }];
+    expect(detectKind(d)).toBe('bike');
+    const p = buildReport(d).find((i) => i.title === 'Protocollo identificato')!;
+    expect(p.verdict).toBe('si');
   });
 });

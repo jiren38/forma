@@ -41,6 +41,8 @@ export type DeviceRecord = {
   /** Ultimo valore visto per ogni campo decodificato (chiave = `${charShort}:${field}`). */
   seen: Record<string, { label: string; value: number | string; unit?: string; source: string; t: number }>;
   features?: MachineFeatures;
+  /** Tipo corretto in automatico in base ai dati FTMS trasmessi (era stato scelto un altro tipo). */
+  kindCorrectedFrom?: MachineKind;
   log: LogEntry[];
   platform: string;
 };
@@ -78,6 +80,14 @@ const EXPECT: Record<'bike' | 'treadmill', Expect[]> = {
 const FTMS = 0x1826;
 const CP = 0x2ad9;
 
+/** Tipo di attrezzo dedotto dalla caratteristica dati FTMS presente (Indoor Bike Data o Treadmill Data). */
+export function detectKind(d: DeviceRecord): MachineKind | null {
+  const shorts = new Set(d.services.flatMap((s) => s.chars.map((c) => shortOf(c.uuid))));
+  if (shorts.has(0x2ad2) && !shorts.has(0x2acd)) return 'bike';
+  if (shorts.has(0x2acd) && !shorts.has(0x2ad2)) return 'treadmill';
+  return null;
+}
+
 function hasService(d: DeviceRecord, short: number) { return d.services.some((s) => shortOf(s.uuid) === short); }
 function allChars(d: DeviceRecord) { return d.services.flatMap((s) => s.chars); }
 function findChar(d: DeviceRecord, short: number) { return allChars(d).find((c) => shortOf(c.uuid) === short); }
@@ -113,6 +123,10 @@ export function buildReport(d: DeviceRecord): ReportItem[] {
   if (!d.everConnected) protoLines.push('Non determinabile senza connessione.');
   else {
     protoLines.push(ftms ? 'FTMS (Fitness Machine Service 0x1826) PRESENTE.' : 'FTMS (0x1826) NON presente tra i servizi accessibili.');
+    const det = detectKind(d);
+    if (det === 'bike') protoLines.push('Trasmette "Indoor Bike Data" (0x2AD2): per FTMS è una CYCLETTE.');
+    if (det === 'treadmill') protoLines.push('Trasmette "Treadmill Data" (0x2ACD): per FTMS è un TAPIS ROULANT.');
+    if (d.kindCorrectedFrom) protoLines.push(`Tipo corretto in automatico: era stato scelto "${KIND_LABEL[d.kindCorrectedFrom]}".`);
     if (std.length) protoLines.push(`Servizi standard trovati: ${std.join(', ')}`);
     if (other.length) protoLines.push(`Servizi non standard (proprietari) trovati: ${other.join(', ')}`);
     if (!ftms) protoLines.push('Web Bluetooth mostra solo i servizi dichiarati: eventuali servizi proprietari vanno cercati con nRF Connect e aggiunti a mano.');
