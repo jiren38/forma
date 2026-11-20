@@ -43,6 +43,7 @@ const EditProfile = lazy(() => import('@/features/profile/EditProfile'));
 const EquipmentPage = lazy(() => import('@/features/profile/EquipmentPage'));
 const SettingsPage = lazy(() => import('@/features/profile/SettingsPage'));
 const PrivacyPage = lazy(() => import('@/features/profile/PrivacyPage'));
+const BluetoothDiagnostics = lazy(() => import('@/features/diagnostics/bluetooth/BluetoothDiagnostics'));
 
 function ThemeSync() {
   const s = useSettings();
@@ -99,6 +100,7 @@ function Shell() {
             <Route path="/profile/equipment" element={<EquipmentPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/diagnostics/bluetooth" element={<BluetoothDiagnostics />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
