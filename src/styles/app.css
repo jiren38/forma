@@ -594,3 +594,25 @@ a.card.row, a.card.col { display: flex; }
 .danger-soft { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .sticky-actions { position: sticky; bottom: calc(var(--nav-h) + var(--safe-b) + 8px); z-index: 5; }
 @media (min-width: 1024px) { .sticky-actions { bottom: 16px; } }
+
+/* ---------------- Cardio integrato ---------------- */
+.cardio-lines { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 13.5px; color: var(--text-2); }
+.cardio-lines.compact { font-size: 12.5px; padding-left: 16px; }
+.cardio-box { border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--border)); background: var(--blue-soft); border-radius: var(--radius); padding: 12px; }
+.card.cardio-card { border-color: color-mix(in srgb, var(--blue) 40%, var(--border)); background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 7%, var(--surface)) 0%, var(--surface) 70%); }
+.phase-edit { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; background: var(--surface-2); }
+.phase-edit .grid-3 { gap: 8px; }
+.phase-edit .field label { font-size: 11.5px; }
+.group-label { font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 4px 2px 0; display: flex; align-items: center; gap: 6px; }
+.group-label.cardio { color: var(--blue); }
+.phase-list { display: grid; gap: 4px; margin-top: 10px; max-height: 240px; overflow: auto; }
+.phase-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; font-size: 13px; background: var(--surface-2); }
+.phase-row.now { background: var(--blue-soft); outline: 1.5px solid var(--blue); font-weight: 650; }
+.phase-row.past { opacity: .5; }
+.phase-row .k { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.phase-row .k.work { background: var(--orange); } .phase-row .k.recovery { background: var(--blue); } .phase-row .k.warmup, .phase-row .k.cooldown { background: var(--success); }
+.cardio-timer { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.cardio-now { border-radius: var(--radius); padding: 12px; background: var(--surface-2); margin-top: 10px; }
+.cardio-now .big { font-family: var(--font-display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
+.compare { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 12px; font-size: 13px; align-items: baseline; }
+.compare .h { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }

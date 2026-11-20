@@ -387,6 +387,8 @@ export const EXERCISES: Exercise[] = [
   ex('run_outdoor', 'Corsa all’aperto', 'Outdoor Run', 'cardio_machine', 'run', ['cardio'], ['quads', 'calves', 'glutes'], [], 1, { tracking: 'cardio' }),
   ex('walk_outdoor', 'Camminata veloce', 'Brisk Walk', 'cardio_machine', 'walk', ['cardio'], ['calves'], [], 1, { tracking: 'cardio' }),
   ex('treadmill_run', 'Corsa sul tapis roulant', 'Treadmill Run', 'cardio_machine', 'run', ['cardio'], ['quads', 'calves'], ['treadmill'], 1),
+  ex('treadmill_walk', 'Camminata sul tapis roulant', 'Treadmill Walk', 'cardio_machine', 'walk', ['cardio'], ['calves', 'quads'], ['treadmill'], 1),
+  ex('treadmill_intervals', 'Intervalli sul tapis roulant', 'Treadmill Intervals', 'cardio_machine', 'run', ['cardio'], ['quads', 'calves'], ['treadmill'], 2),
   ex('treadmill_incline_walk', 'Camminata in salita sul tapis roulant', 'Incline Treadmill Walk', 'cardio_machine', 'walk', ['cardio'], ['glutes', 'calves'], ['treadmill'], 1),
   ex('bike', 'Cyclette', 'Stationary Bike', 'cardio_machine', 'bike', ['cardio'], ['quads'], ['bike'], 1),
   ex('elliptical', 'Ellittica', 'Elliptical', 'cardio_machine', 'elliptical', ['cardio'], ['quads', 'glutes'], ['elliptical'], 1),
@@ -395,6 +397,9 @@ export const EXERCISES: Exercise[] = [
   ex('jumping_jack', 'Jumping jack', 'Jumping Jacks', 'conditioning', 'jumping_jack', ['cardio'], ['calves', 'shoulders'], [], 1, { category: 'cardio', tracking: 'time' }),
   ex('high_knees', 'Skip alto', 'High Knees', 'conditioning', 'run', ['cardio'], ['hip_flexors', 'calves'], [], 1, { category: 'cardio', tracking: 'time' }),
   ex('stair_climber', 'Stair climber', 'Stair Climber', 'cardio_machine', 'step_up', ['cardio'], ['glutes', 'quads'], ['machine_other'], 1),
+  ex('bike_intervals', 'Cyclette a intervalli', 'Bike Interval Training', 'cardio_machine', 'bike', ['cardio'], ['quads', 'glutes'], ['bike'], 1),
+  ex('elliptical_intervals', 'Ellittica a intervalli', 'Elliptical Intervals', 'cardio_machine', 'elliptical', ['cardio'], ['quads', 'glutes'], ['elliptical'], 2),
+  ex('rower_intervals', 'Vogatore a intervalli', 'Rowing Intervals', 'cardio_machine', 'rower', ['cardio'], ['back', 'quads'], ['rower'], 2),
   ex('hiit_bike', 'HIIT in cyclette', 'Bike Intervals', 'cardio_machine', 'bike', ['cardio'], ['quads'], ['bike'], 2),
 
   // ======== MOBILITÀ E STRETCHING ========

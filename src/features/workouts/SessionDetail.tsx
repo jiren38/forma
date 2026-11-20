@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Trophy, Clock, Layers, Repeat2, Weight, Trash2, Save, Info, TrendingUp, TrendingDown, Minus, Star, PartyPopper, Play } from 'lucide-react';
+import { Trophy, Clock, Layers, Repeat2, Weight, Trash2, Save, Info, TrendingUp, TrendingDown, Minus, Star, PartyPopper, Play, Bike, Route, Gauge, Flame, Dumbbell } from 'lucide-react';
 import { useDoc, store } from '@/db/store';
 import { useSessions, useSettings, saveTemplate } from '@/app/data';
 import { PageHeader, Empty, Confirm, useToast } from '@/components/ui';
@@ -10,6 +10,9 @@ import { formatDuration, formatLongDate, formatTime, fmtN, fmtW, toDisplayWeight
 import type { WorkoutSession, WorkoutTemplate } from '@/lib/types';
 import { ExerciseThumb } from '@/features/exercises/components';
 import { activeSession, startSession, exerciseLogFor, saveSession } from './session';
+import { sessionCardioStats, templateCardio } from '@/lib/cardio';
+import { CardioIcon } from './cardio-ui';
+import { PlannedVsActual } from './CardioLive';
 
 function prText(kind: string, value: number, reps: number | undefined, units: 'kg' | 'lb') {
   if (kind === 'weight') return `${fmtW(value, units)} × ${reps}`;
@@ -42,6 +45,10 @@ export default function SessionDetail() {
   const before = done.filter((x) => x.startedAt < s.startedAt && x.id !== s.id);
   const prev = [...before].reverse().find((x) => (s.templateId ? x.templateId === s.templateId : x.name === s.name));
   const pst = prev ? sessionStats(prev) : undefined;
+  const cst = sessionCardioStats(s);
+  const pcst = prev ? sessionCardioStats(prev) : undefined;
+  const strengthLogs = s.exercises.filter((e) => !e.cardio);
+  const cardioLogs = s.exercises.filter((e) => e.cardio?.done && e.cardio.actual);
   const justDone = sp.get('done') === '1';
 
   async function saveAsTemplate() {
@@ -49,6 +56,7 @@ export default function SessionDetail() {
     const t: WorkoutTemplate = {
       id: uid('tpl_'), name: s!.name, source: 'manual', createdAt: now, updatedAt: now, notes: '',
       exercises: s!.exercises.map((e) => {
+        if (e.cardio) return templateCardio(e.exerciseId, e.cardio.plan, e.notes ?? '');
         const ds = doneSets(e).filter((x) => x.type !== 'warmup');
         const reps = ds.map((x) => x.reps ?? 0).filter(Boolean);
         return { uid: uid('te_'), exerciseId: e.exerciseId, sets: Math.max(1, ds.length), repMin: reps.length ? Math.min(...reps) : e.repMin, repMax: reps.length ? Math.max(...reps) : e.repMax, restSec: e.restSec, targetWeight: ds.length ? Math.max(...ds.map((x) => x.weight ?? 0)) || null : null, notes: e.notes ?? '' };
@@ -64,7 +72,7 @@ export default function SessionDetail() {
     if (tpl) await startSession(tpl);
     else {
       const ns = await startSession(null, s!.name);
-      await saveSession({ ...ns, exercises: s!.exercises.map((e) => exerciseLogFor(e.exerciseId, sessions, { sets: Math.max(1, doneSets(e).length), repMin: e.repMin, repMax: e.repMax, restSec: e.restSec })) });
+      await saveSession({ ...ns, exercises: s!.exercises.map((e) => exerciseLogFor(e.exerciseId, sessions, e.cardio ? { cardio: e.cardio.plan } : { sets: Math.max(1, doneSets(e).length), repMin: e.repMin, repMax: e.repMax, restSec: e.restSec })) });
     }
     nav('/workout/live');
   }
@@ -90,12 +98,23 @@ export default function SessionDetail() {
         </div>
       )}
 
-      <div className="grid-2">
-        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Clock size={13} /> Durata</span><span className="v">{formatDuration(st.durationMs)}</span><Delta cur={st.durationMs / 60000} prev={pst && pst.durationMs / 60000} fmt={(n) => `${Math.round(n)} min`} /></div></div>
+      <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Clock size={13} /> Durata totale</span><span className="v">{formatDuration(st.durationMs)}</span><Delta cur={st.durationMs / 60000} prev={pst && pst.durationMs / 60000} fmt={(n) => `${Math.round(n)} min`} /></div></div>
+      {st.sets > 0 && <div className="group-label"><Dumbbell size={13} /> Parte muscolare</div>}
+      {st.sets > 0 && <div className="grid-2">
+        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Dumbbell size={13} /> Esercizi</span><span className="v">{st.exercises}</span></div></div>
         <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Weight size={13} /> Volume</span><span className="v">{fmtW(st.volume, units)}</span><Delta cur={st.volume} prev={pst?.volume} fmt={(n) => fmtW(n, units)} /></div></div>
         <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Layers size={13} /> Serie</span><span className="v">{st.sets}</span><Delta cur={st.sets} prev={pst?.sets} fmt={(n) => String(n)} /></div></div>
         <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Repeat2 size={13} /> Ripetizioni</span><span className="v">{fmtN(st.reps)}</span><Delta cur={st.reps} prev={pst?.reps} fmt={(n) => String(n)} /></div></div>
-      </div>
+      </div>}
+      {cst.activities > 0 && <>
+        <div className="group-label cardio"><Bike size={13} /> Parte cardio</div>
+        <div className="grid-2">
+          <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Bike size={13} /> Minuti di cardio</span><span className="v">{fmtN(cst.minutes, 1)}</span><span className="tiny muted">{cst.activities} attività · previsti {fmtN(cst.plannedMin, 0)}</span><Delta cur={cst.minutes} prev={pcst?.activities ? pcst.minutes : undefined} fmt={(n) => `${fmtN(n, 1)} min`} /></div></div>
+          <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Route size={13} /> Distanza</span><span className="v">{cst.distanceKm != null ? `${fmtN(cst.distanceKm, 2)} km` : 'n.d.'}</span></div></div>
+          <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Gauge size={13} /> Velocità media</span><span className="v">{cst.avgSpeedKmh != null ? `${fmtN(cst.avgSpeedKmh, 1)} km/h` : 'n.d.'}</span></div></div>
+          <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Flame size={13} /> Calorie stimate</span><span className="v">{cst.kcal != null ? `~${fmtN(cst.kcal)}` : 'n.d.'}</span><span className="tiny muted">stima, non misura</span></div></div>
+        </div>
+      </>}
       {prev ? <p className="tiny muted">Confronto con la sessione precedente “{prev.name}” del {new Date(prev.startedAt).toLocaleDateString('it-IT')}.</p> : <p className="tiny muted">Nessuna sessione precedente comparabile: il confronto comparirà dalla prossima volta.</p>}
 
       {!!s.prs?.length && (
@@ -107,9 +126,23 @@ export default function SessionDetail() {
         </section>
       )}
 
-      <div className="section-title">Esercizi · {st.exercises}</div>
+      {cardioLogs.length > 0 && <>
+        <div className="section-title">Attività cardio · {cardioLogs.length}</div>
+        <div className="stack-sm">
+          {cardioLogs.map((ex) => (
+            <div key={ex.uid} className="card cardio-card" style={{ padding: 12 }}>
+              <Link to={`/exercises/${ex.exerciseId}`} className="row" style={{ gap: 10, marginBottom: 8 }}>
+                <CardioIcon machine={ex.cardio!.plan.machine} />
+                <b className="ellipsis grow">{getExercise(ex.exerciseId)?.name}</b>
+              </Link>
+              <PlannedVsActual plan={ex.cardio!} />
+            </div>
+          ))}
+        </div>
+      </>}
+      {strengthLogs.length > 0 && <div className="section-title">Esercizi muscolari · {strengthLogs.length}</div>}
       <div className="stack-sm">
-        {s.exercises.map((ex) => {
+        {strengthLogs.map((ex) => {
           const e = getExercise(ex.exerciseId);
           if (!e) return null;
           const prevEx = prev?.exercises.find((x) => x.exerciseId === ex.exerciseId);

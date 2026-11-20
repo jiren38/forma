@@ -8,6 +8,10 @@ import { BarChart } from '@/components/charts';
 import { ExerciseAnimation } from '@/features/exercises/anim/render';
 import { addDays, dayKey, fmtN, formatShortDate, fromKey, startOfMonth, startOfWeek, sum, uid } from '@/lib/util';
 import type { CardioLog, CardioType } from '@/lib/types';
+import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
+import { useCardioEntries } from '@/features/progress/CardioProgress';
+import { CardioIcon } from '@/features/workouts/cardio-ui';
 
 /** Stima kcal con MET × peso × ore (indicativa). Se c'è la velocità per corsa/camminata adatta il MET. */
 export function estimateKcal(type: CardioType, minutes: number, weightKg: number, speedKmh?: number | null) {
@@ -24,11 +28,14 @@ export default function CardioPage() {
   const [edit, setEdit] = useState<CardioLog | null>(null);
   const [del, setDel] = useState<CardioLog | null>(null);
   const [period, setPeriod] = useState<'week' | 'month'>('week');
+  // statistiche su tutte le attività: registrate qui e svolte nelle schede di allenamento
+  const all = useCardioEntries();
+  const fromSessions = all.filter((e) => e.source === 'session').reverse();
   const from = dayKey(period === 'week' ? startOfWeek() : startOfMonth());
-  const inP = logs.filter((l) => l.date >= from);
+  const inP = all.filter((l) => l.date >= from).map((e) => ({ durationMin: e.actualMin, distanceKm: e.distanceKm, kcal: e.kcal }));
   const weeks = Array.from({ length: 8 }, (_, i) => {
     const ws = addDays(startOfWeek(), -7 * (7 - i)), we = addDays(ws, 7);
-    return { label: `${ws.getDate()}/${ws.getMonth() + 1}`, value: sum(logs.filter((l) => fromKey(l.date) >= ws && fromKey(l.date) < we).map((l) => l.durationMin)) };
+    return { label: `${ws.getDate()}/${ws.getMonth() + 1}`, value: sum(all.filter((l) => fromKey(l.date) >= ws && fromKey(l.date) < we).map((l) => l.actualMin)) };
   });
   const blank = (): CardioLog => ({ id: uid('c_'), date: dayKey(), type: 'run', durationMin: 30, distanceKm: null, avgSpeedKmh: null, kcal: null, avgHr: null, maxHr: null, notes: '', createdAt: new Date().toISOString() });
 
@@ -42,9 +49,24 @@ export default function CardioPage() {
         <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Route size={13} /> Distanza</span><span className="v">{fmtN(sum(inP.map((l) => l.distanceKm ?? 0)), 1)} km</span></div></div>
         <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Flame size={13} /> Kcal stimate</span><span className="v">{fmtN(sum(inP.map((l) => l.kcal ?? 0)))}</span></div></div>
       </div>
-      {logs.length > 0 && <section className="card"><div className="card-title"><h3>Minuti a settimana</h3></div><BarChart ariaLabel="Minuti di cardio per settimana" data={weeks} color="var(--blue)" highlightLast /></section>}
-      <div className="section-title">Sessioni</div>
-      {logs.length === 0 ? <Empty icon={<Bike />} title="Nessuna sessione cardio" text="Registra camminate, corse, bici, ellittica, vogatore, nuoto o altre attività." action={<button className="btn primary" onClick={() => setEdit(blank())}><Plus size={18} /> Registra cardio</button>} /> : (
+      {all.length > 0 && <section className="card"><div className="card-title"><h3>Minuti a settimana</h3></div><BarChart ariaLabel="Minuti di cardio per settimana" data={weeks} color="var(--blue)" highlightLast /></section>}
+      {fromSessions.length > 0 && <>
+        <div className="section-title">Nelle schede di allenamento <Link to="/progress" className="small accent" style={{ textTransform: 'none', letterSpacing: 0 }}>Progressi</Link></div>
+        <div className="settings-group">
+          {fromSessions.slice(0, 10).map((e) => (
+            <Link key={e.id} to={`/session/${e.sessionId}`} className="list-item">
+              <CardioIcon machine={e.machine} />
+              <span className="grow" style={{ minWidth: 0 }}>
+                <div className="li-title ellipsis">{e.label} <span className="tiny muted">· {formatShortDate(e.date)}</span></div>
+                <div className="li-sub">{fmtN(e.actualMin, 1)} min{e.plannedMin != null ? ` di ${fmtN(e.plannedMin, 0)} previsti` : ''}{e.distanceKm ? ` · ${fmtN(e.distanceKm, 2)} km` : ''}{e.speedKmh ? ` · ${fmtN(e.speedKmh, 1)} km/h` : ''}{e.kcal ? ` · ~${e.kcal} kcal` : ''}</div>
+              </span>
+              <ChevronRight size={18} className="muted" />
+            </Link>
+          ))}
+        </div>
+      </>}
+      <div className="section-title">Registrate a parte</div>
+      {logs.length === 0 ? <Empty icon={<Bike />} title="Nessuna sessione registrata a parte" text="Le attività cardio delle schede si registrano dall’allenamento. Qui puoi aggiungere camminate, corse, bici, nuoto o altre attività svolte fuori programma." action={<button className="btn primary" onClick={() => setEdit(blank())}><Plus size={18} /> Registra cardio</button>} /> : (
         <div className="settings-group">
           {logs.map((l) => (
             <div key={l.id} className="list-item" style={{ cursor: 'default' }}>

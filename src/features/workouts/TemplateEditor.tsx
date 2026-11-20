@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, ArrowUp, ArrowDown, Repeat, Play, Copy, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, Repeat, Play, Copy, Info, ChevronDown, ChevronUp, Bike, Dumbbell } from 'lucide-react';
 import { useDoc } from '@/db/store';
 import { store } from '@/db/store';
 import { saveTemplate, useProfile, useSettings, useSessions } from '@/app/data';
@@ -12,7 +12,9 @@ import { lastPerformance } from '@/lib/stats';
 import { uid, fromDisplayWeight, toDisplayWeight, fmtW, formatClock } from '@/lib/util';
 import { activeSession, startSession } from './session';
 import { estimateMinutes } from './WorkoutsPage';
-import type { Program, TemplateExercise, WorkoutTemplate } from '@/lib/types';
+import { AddCardioSheet, CardioIcon, CardioPlanEditor, CardioPlanLines, MachinePicker, convertPlan } from './cardio-ui';
+import { cardioMinutesOf, defaultPlanFor, isCardioId, planFromLegacy, planMinutes, planSummary, templateCardio, MACHINE_INFO } from '@/lib/cardio';
+import type { CardioPlan, Program, TemplateExercise, WorkoutTemplate } from '@/lib/types';
 
 export default function TemplateEditor() {
   const { id = '' } = useParams();
@@ -27,6 +29,8 @@ export default function TemplateEditor() {
   const [swap, setSwap] = useState<TemplateExercise | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [del, setDel] = useState(false);
+  const [addCardio, setAddCardio] = useState(false);
+  const [machineFor, setMachineFor] = useState<TemplateExercise | null>(null);
 
   useEffect(() => { if (sp.get('new') && t && !t.exercises.length) setPicker(true); }, [sp.get('new'), !!t]); // eslint-disable-line
 
@@ -35,6 +39,10 @@ export default function TemplateEditor() {
   if (!t) return <div className="page"><PageHeader title="Scheda" back="/workouts" /><Empty icon={<Info />} title="Scheda non trovata" text="Potrebbe essere stata eliminata." action={<Link to="/workouts" className="btn">Torna agli allenamenti</Link>} /></div>;
 
   const update = (p: Partial<WorkoutTemplate>) => saveTemplate({ ...t, ...p });
+  const setPlan = (u: string, plan: CardioPlan, exerciseId?: string) => {
+    const m = Math.round(planMinutes(plan));
+    updateEx(u, { cardio: plan, repMin: m, repMax: m, sets: 1, restSec: 0, ...(exerciseId ? { exerciseId } : {}) });
+  };
   const updateEx = (u: string, p: Partial<TemplateExercise>) => update({ exercises: t.exercises.map((e) => (e.uid === u ? { ...e, ...p } : e)) });
   const move = (i: number, d: number) => {
     const ex = [...t.exercises];
@@ -48,6 +56,7 @@ export default function TemplateEditor() {
     const goals = profile?.goals ?? ['fitness'];
     const add: TemplateExercise[] = ids.map((exId) => {
       const e = getExercise(exId)!;
+      if (isCardioId(exId) && profile) return templateCardio(exId, defaultPlanFor(exId, profile));
       const pr = prescription(goals, profile?.level ?? 'beginner', e.mechanic === 'compound', profile?.sessionStyle ?? 'long');
       const timed = e.tracking === 'time';
       const last = lastPerformance(sessions, exId);
@@ -78,6 +87,9 @@ export default function TemplateEditor() {
   }
 
   const units = settings.units;
+  const strength = t.exercises.filter((e) => !e.cardio && !isCardioId(e.exerciseId));
+  const cardioN = t.exercises.length - strength.length;
+  const planOf = (te: TemplateExercise): CardioPlan | null => te.cardio ?? (isCardioId(te.exerciseId) && profile ? planFromLegacy(te, profile) : null);
 
   return (
     <div className="page stack" style={{ paddingBottom: 120 }}>
@@ -91,17 +103,55 @@ export default function TemplateEditor() {
       <div className="card stack-sm">
         <div className="field"><label htmlFor="tname">Nome della scheda</label><input id="tname" className="input" value={t.name} maxLength={60} onChange={(e) => update({ name: e.target.value })} placeholder="Es. Petto e tricipiti" /></div>
         <div className="field"><label htmlFor="tnotes">Note (facoltative)</label><textarea id="tnotes" className="textarea" style={{ minHeight: 60 }} value={t.notes ?? ''} onChange={(e) => update({ notes: e.target.value })} placeholder="Riscaldamento, indicazioni, obiettivi della seduta…" /></div>
-        <div className="small muted">{t.exercises.length} esercizi · {t.exercises.reduce((a, e) => a + e.sets, 0)} serie · durata stimata ~{estimateMinutes(t)} min</div>
+        <div className="small muted">
+          <span className="row wrap" style={{ gap: 10 }}>
+            <span className="row" style={{ gap: 4 }}><Dumbbell size={14} /> {strength.length} esercizi · {strength.reduce((a, e) => a + e.sets, 0)} serie</span>
+            <span className="row" style={{ gap: 4, color: cardioN ? 'var(--blue)' : undefined }}><Bike size={14} /> {cardioN ? `${cardioN} cardio · ${Math.round(cardioMinutesOf(t))} min` : 'nessun cardio'}</span>
+            <span>durata stimata ~{estimateMinutes(t)} min</span>
+          </span>
+        </div>
       </div>
 
       {t.exercises.length === 0 ? (
-        <div className="card"><Empty icon={<Plus />} title="Nessun esercizio" text="Aggiungi esercizi dalla libreria: potrai poi impostare serie, ripetizioni, recupero e note." action={<button className="btn primary" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizi</button>} /></div>
+        <div className="card"><Empty icon={<Plus />} title="Nessun esercizio" text="Aggiungi esercizi dalla libreria o attività cardio: potrai poi impostare serie e ripetizioni, oppure durata, velocità, pendenza e resistenza." action={<div className="row wrap" style={{ justifyContent: 'center' }}><button className="btn primary" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizi</button><button className="btn" onClick={() => setAddCardio(true)}><Bike size={18} /> Aggiungi cardio</button></div>} /></div>
       ) : (
         <div className="stack-sm">
           {t.exercises.map((te, i) => {
             const e = getExercise(te.exerciseId);
             if (!e) return null;
             const isOpen = open === te.uid;
+            const cplan = planOf(te);
+            if (cplan) {
+              return (
+                <div key={te.uid} className="card cardio-card" style={{ padding: 12 }}>
+                  <div className="row" style={{ gap: 10 }}>
+                    <span className="pill blue" aria-hidden>{i + 1}</span>
+                    <button className="row grow" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', cursor: 'pointer', minWidth: 0, gap: 10 }} onClick={() => setOpen(isOpen ? null : te.uid)} aria-expanded={isOpen}>
+                      <CardioIcon machine={cplan.machine} />
+                      <span className="grow" style={{ minWidth: 0 }}>
+                        <span className="row" style={{ gap: 6 }}><b className="ellipsis">{e.name}</b><span className="pill blue">Cardio</span></span>
+                        <span className="tiny muted">{planSummary(cplan)}</span>
+                      </span>
+                      {isOpen ? <ChevronUp size={18} className="muted" /> : <ChevronDown size={18} className="muted" />}
+                    </button>
+                  </div>
+                  {!isOpen && <div style={{ marginTop: 8 }}><CardioPlanLines plan={cplan} compact /></div>}
+                  {isOpen && (
+                    <div className="stack-sm" style={{ marginTop: 12 }}>
+                      <CardioPlanEditor plan={cplan} exerciseId={te.exerciseId} profile={profile} onChange={(np) => setPlan(te.uid, np)} />
+                      {cplan.progression && <p className="hint">Progressione automatica: +{cplan.progression.stepMin} min quando completi due sessioni come previsto, fino a {cplan.progression.capMin} min.</p>}
+                      <div className="field"><label>Note</label><input className="input" value={te.notes ?? ''} onChange={(ev) => updateEx(te.uid, { notes: ev.target.value })} placeholder="Es. programma della macchina, sensazioni" /></div>
+                      <div className="row wrap" style={{ gap: 6 }}>
+                        <button className="btn sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Sposta su"><ArrowUp size={15} /> Su</button>
+                        <button className="btn sm" onClick={() => move(i, 1)} disabled={i === t.exercises.length - 1} aria-label="Sposta giù"><ArrowDown size={15} /> Giù</button>
+                        <button className="btn sm" onClick={() => setMachineFor(te)}><Repeat size={15} /> Cambia macchina</button>
+                        <button className="btn sm danger" onClick={() => { update({ exercises: t.exercises.filter((x) => x.uid !== te.uid) }); toast('Attività cardio rimossa'); }}><Trash2 size={15} /> Rimuovi</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
             const timed = e.tracking === 'time';
             const weighted = e.tracking === 'weight_reps';
             return (
@@ -143,7 +193,10 @@ export default function TemplateEditor() {
               </div>
             );
           })}
-          <button className="btn block" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizi</button>
+          <div className="grid-2">
+            <button className="btn block" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizi</button>
+            <button className="btn block" onClick={() => setAddCardio(true)}><Bike size={18} /> Aggiungi cardio</button>
+          </div>
         </div>
       )}
 
@@ -152,6 +205,16 @@ export default function TemplateEditor() {
       )}
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={addExercises} multi />
+      <AddCardioSheet open={addCardio} onClose={() => setAddCardio(false)} profile={profile} onAdd={(exId, plan) => { const te = templateCardio(exId, plan); update({ exercises: [...t.exercises, te] }); setOpen(te.uid); toast('Cardio aggiunto alla scheda'); }} />
+      <MachinePicker open={!!machineFor} onClose={() => setMachineFor(null)} profile={profile} current={machineFor ? planOf(machineFor)?.machine : undefined}
+        onPick={(m) => {
+          const te = machineFor; setMachineFor(null);
+          if (!te || !profile) return;
+          const cur = planOf(te)!;
+          const c = convertPlan(cur, m, te.exerciseId, profile);
+          setPlan(te.uid, c.plan, c.exerciseId);
+          toast(`Macchina cambiata: ${MACHINE_INFO[m].label}`);
+        }} />
       <Sheet open={!!swap} onClose={() => setSwap(null)} title="Sostituisci esercizio" wide>
         {swap && (
           <div className="stack-sm">

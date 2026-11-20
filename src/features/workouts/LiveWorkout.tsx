@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Check, Pause, Play, Plus, MoreHorizontal, Trash2, Repeat, ArrowUp, ArrowDown, Info, Trophy, Minimize2,
-  SkipForward, StickyNote, Flag, X, Dumbbell, RotateCcw,
+  SkipForward, StickyNote, Flag, X, Dumbbell, RotateCcw, Bike, Pencil,
 } from 'lucide-react';
 import { useProfile, useSessions, useSettings } from '@/app/data';
 import { store } from '@/db/store';
@@ -18,7 +18,10 @@ import { substitutes } from '@/lib/generator';
 import { e1rm, lastPerformance, personalRecords, sessionDurationMs, sessionStats } from '@/lib/stats';
 import { formatClock, formatDuration, fromDisplayWeight, toDisplayWeight, uid, vibrate, fmtN, fmtW } from '@/lib/util';
 import { discardSession, exerciseLogFor, finishSession, recoverBackup, saveSession, startSession, makeSets } from './session';
-import type { ExerciseLog, SetLog, WorkoutSession } from '@/lib/types';
+import type { CardioLogState, ExerciseLog, SetLog, WorkoutSession } from '@/lib/types';
+import { CardioLive, startCardioTimer } from './CardioLive';
+import { AddCardioSheet, CardioPlanEditor, MachinePicker, convertPlan } from './cardio-ui';
+import { logStateFor, pauseTimer, timerElapsedMs } from '@/lib/cardio';
 
 const REST_KEY = 'forma.restTimer';
 const EFFORT_KEY = 'forma.effortMode';
@@ -64,6 +67,9 @@ export default function LiveWorkout() {
   const [discardOpen, setDiscardOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [addCardio, setAddCardio] = useState(false);
+  const [planFor, setPlanFor] = useState<string | null>(null);
+  const [machineFor, setMachineFor] = useState<ExerciseLog | null>(null);
   const recovered = useRef(false);
   const units = settings.units;
 
@@ -138,10 +144,20 @@ export default function LiveWorkout() {
   const elapsed = sessionDurationMs(session);
   const stats = sessionStats(session);
   const totalSets = session.exercises.reduce((a, e) => a + e.sets.length, 0);
+  const cardioLogs = session.exercises.filter((e) => e.cardio);
+  const cardioDoneMin = Math.round(cardioLogs.reduce((a, e) => a + (e.cardio!.done && e.cardio!.actual ? e.cardio!.actual.durationSec : timerElapsedMs(e.cardio!.timer)/1000), 0) / 60);
+  const cardioPlannedMin = Math.round(cardioLogs.reduce((a, e) => a + e.cardio!.plan.durationMin, 0));
+  const cardioDone = cardioLogs.filter((e) => e.cardio!.done || timerElapsedMs(e.cardio!.timer) >= 60000).length;
+  const setCardio = (exUid: string, c: CardioLogState) => updateEx(exUid, (x) => ({ ...x, cardio: c }));
+  // un solo timer cardio alla volta: avviarne uno mette in pausa gli altri
+  const startCardio = (exUid: string) => save({ exercises: session.exercises.map((e) => (e.cardio ? { ...e, cardio: e.uid === exUid ? startCardioTimer(e.cardio) : { ...e.cardio, timer: pauseTimer(e.cardio.timer) } } : e)) });
 
   function togglePause() {
     if (paused) save({ pausedMs: session.pausedMs + (Date.now() - new Date(session.pausedAt!).getTime()), pausedAt: null });
-    else { save({ pausedAt: new Date().toISOString() }); setRest(null); }
+    else {
+      save({ pausedAt: new Date().toISOString(), exercises: session.exercises.map((e) => (e.cardio?.timer.running ? { ...e, cardio: { ...e.cardio, timer: pauseTimer(e.cardio.timer) } } : e)) });
+      setRest(null);
+    }
   }
 
   function toggleSet(ex: ExerciseLog, st: SetLog, idx: number) {
@@ -217,7 +233,7 @@ export default function LiveWorkout() {
           <button className="icon-btn ghost" onClick={() => nav('/')} aria-label="Riduci: l’allenamento resta attivo"><Minimize2 size={20} /></button>
           <div className="center">
             <div className={`timer-big ${paused ? 'muted' : ''}`} aria-live="off">{formatDuration(elapsed)}</div>
-            <div className="tiny muted">{paused ? 'In pausa' : `${stats.sets}/${totalSets} serie · ${fmtN(toDisplayWeight(stats.volume, units) ?? 0)} ${units}`}</div>
+            <div className="tiny muted">{paused ? 'In pausa' : [totalSets ? `${stats.sets}/${totalSets} serie · ${fmtN(toDisplayWeight(stats.volume, units) ?? 0)} ${units}` : '', cardioLogs.length ? `${cardioDoneMin}/${cardioPlannedMin} min cardio` : ''].filter(Boolean).join(' · ')}</div>
           </div>
           <div className="row" style={{ gap: 4 }}>
             <button className="icon-btn" onClick={togglePause} aria-label={paused ? 'Riprendi allenamento' : 'Metti in pausa'}>{paused ? <Play size={18} /> : <Pause size={18} />}</button>
@@ -234,12 +250,16 @@ export default function LiveWorkout() {
         {paused && <div className="banner warn"><Pause size={18} /><span>Allenamento in pausa: il tempo non viene conteggiato. <button className="link accent" style={{ background: 'none', border: 0, padding: 0, fontWeight: 700, cursor: 'pointer' }} onClick={togglePause}>Riprendi</button></span></div>}
 
         {session.exercises.length === 0 && (
-          <div className="card"><Empty icon={<Plus />} title="Aggiungi il primo esercizio" text="Scegli dalla libreria: vedrai animazione, serie precedenti e record." action={<button className="btn primary" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizio</button>} /></div>
+          <div className="card"><Empty icon={<Plus />} title="Aggiungi il primo esercizio" text="Scegli dalla libreria: vedrai animazione, serie precedenti e record. Oppure aggiungi un’attività cardio con timer." action={<div className="row wrap" style={{ justifyContent: 'center' }}><button className="btn primary" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizio</button><button className="btn" onClick={() => setAddCardio(true)}><Bike size={18} /> Aggiungi cardio</button></div>} /></div>
         )}
 
         {session.exercises.map((ex) => {
           const e = getExercise(ex.exerciseId);
           if (!e) return null;
+          if (ex.cardio) {
+            return <CardioLive key={ex.uid} ex={ex as ExerciseLog & { cardio: CardioLogState }} profile={profile} sessionPaused={paused}
+              onChange={(c) => setCardio(ex.uid, c)} onStart={() => startCardio(ex.uid)} onMenu={() => setExMenu(ex)} />;
+          }
           const prev = prevLogs[ex.exerciseId];
           const prevDone = prev?.sets.filter((x) => x.done) ?? [];
           const doneN = ex.sets.filter((x) => x.done).length;
@@ -314,7 +334,12 @@ export default function LiveWorkout() {
           );
         })}
 
-        {session.exercises.length > 0 && <button className="btn block lg" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizio</button>}
+        {session.exercises.length > 0 && (
+          <div className="grid-2">
+            <button className="btn block lg" onClick={() => setPicker(true)}><Plus size={18} /> Esercizio</button>
+            <button className="btn block lg" onClick={() => setAddCardio(true)}><Bike size={18} /> Cardio</button>
+          </div>
+        )}
         <textarea className="textarea" placeholder="Note sull’allenamento" value={session.notes ?? ''} onChange={(e) => save({ notes: e.target.value })} aria-label="Note sull’allenamento" />
         <button className="btn danger block" onClick={() => setDiscardOpen(true)}><Trash2 size={16} /> Annulla allenamento</button>
       </div>
@@ -334,10 +359,36 @@ export default function LiveWorkout() {
       )}
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={addExercises} multi />
+      <AddCardioSheet open={addCardio} onClose={() => setAddCardio(false)} profile={profile} onAdd={(exId, plan) => { save({ exercises: [...session.exercises, { uid: uid('el_'), exerciseId: exId, restSec: 0, repMin: Math.round(plan.durationMin), repMax: Math.round(plan.durationMin), notes: '', sets: [], cardio: logStateFor(plan) }] }); toast('Cardio aggiunto'); }} />
+      {(() => {
+        const ex = planFor ? session.exercises.find((x) => x.uid === planFor && x.cardio) : undefined;
+        return (
+          <Sheet open={!!ex} onClose={() => setPlanFor(null)} title="Parametri previsti" wide footer={<button className="btn primary block" onClick={() => setPlanFor(null)}>Fatto</button>}>
+            {ex?.cardio && <CardioPlanEditor plan={ex.cardio.plan} exerciseId={ex.exerciseId} profile={profile} onChange={(plan) => setCardio(ex.uid, { ...ex.cardio!, plan })} />}
+          </Sheet>
+        );
+      })()}
+      <MachinePicker open={!!machineFor} onClose={() => setMachineFor(null)} profile={profile} current={machineFor?.cardio?.plan.machine}
+        onPick={(m) => {
+          const ex = machineFor; setMachineFor(null);
+          if (!ex?.cardio || !profile) return;
+          const c = convertPlan(ex.cardio.plan, m, ex.exerciseId, profile);
+          updateEx(ex.uid, (x) => ({ ...x, exerciseId: c.exerciseId, cardio: { ...x.cardio!, plan: c.plan } }));
+          toast(`Macchina cambiata: ${getExercise(c.exerciseId)?.name}`);
+        }} />
 
       {/* Menu esercizio */}
       <Sheet open={!!exMenu} onClose={() => setExMenu(null)} title={exMenu ? getExercise(exMenu.exerciseId)?.name : ''}>
-        {exMenu && (
+        {exMenu && exMenu.cardio && (
+          <div className="settings-group">
+            <button className="list-item" onClick={() => { setPlanFor(exMenu.uid); setExMenu(null); }}><span className="li-icon"><Pencil size={18} /></span><span className="li-title">Modifica parametri previsti</span></button>
+            <button className="list-item" onClick={() => { setMachineFor(exMenu); setExMenu(null); }}><span className="li-icon"><Repeat size={18} /></span><span className="li-title">Cambia macchina</span></button>
+            <button className="list-item" onClick={() => { move(exMenu, -1); setExMenu(null); }}><span className="li-icon"><ArrowUp size={18} /></span><span className="li-title">Sposta su</span></button>
+            <button className="list-item" onClick={() => { move(exMenu, 1); setExMenu(null); }}><span className="li-icon"><ArrowDown size={18} /></span><span className="li-title">Sposta giù</span></button>
+            <button className="list-item" onClick={() => { save({ exercises: session.exercises.filter((x) => x.uid !== exMenu.uid) }); setExMenu(null); toast('Attività rimossa'); }}><span className="li-icon"><Trash2 size={18} color="var(--danger)" /></span><span className="li-title danger-text">Rimuovi attività</span></button>
+          </div>
+        )}
+        {exMenu && !exMenu.cardio && (
           <div className="stack">
             <div className="field"><label>Recupero tra le serie</label>
               <div className="row wrap" style={{ gap: 6 }}>
@@ -384,6 +435,7 @@ export default function LiveWorkout() {
           <div className="settings-group">
             <button className="list-item" onClick={() => { togglePause(); setMenuOpen(false); }}><span className="li-icon">{paused ? <Play size={18} /> : <Pause size={18} />}</span><span className="li-title">{paused ? 'Riprendi' : 'Metti in pausa'}</span></button>
             <button className="list-item" onClick={() => { setMenuOpen(false); setPicker(true); }}><span className="li-icon"><Plus size={18} /></span><span className="li-title">Aggiungi esercizio</span></button>
+            <button className="list-item" onClick={() => { setMenuOpen(false); setAddCardio(true); }}><span className="li-icon"><Bike size={18} /></span><span className="li-title">Aggiungi cardio</span></button>
             <button className="list-item" onClick={() => { setMenuOpen(false); setDiscardOpen(true); }}><span className="li-icon"><X size={18} color="var(--danger)" /></span><span className="li-title danger-text">Annulla allenamento</span></button>
           </div>
         </div>
@@ -391,7 +443,7 @@ export default function LiveWorkout() {
 
       {/* Conclusione */}
       <Sheet open={finishOpen} onClose={() => setFinishOpen(false)} title="Concludere l’allenamento?"
-        footer={stats.sets > 0
+        footer={stats.sets > 0 || cardioDone > 0
           ? <><button className="btn grow" onClick={() => setFinishOpen(false)}>Continua</button><button className="btn primary grow" disabled={busy} onClick={finish}><Flag size={16} /> Concludi e salva</button></>
           : <><button className="btn grow" onClick={() => setFinishOpen(false)}>Continua</button><button className="btn danger grow" onClick={discard}>Annulla allenamento</button></>}>
         <div className="stack-sm">
@@ -400,8 +452,9 @@ export default function LiveWorkout() {
             <div className="stat-tile"><div className="stat"><span className="v">{stats.sets}</span><span className="l">serie</span></div></div>
             <div className="stat-tile"><div className="stat"><span className="v">{fmtW(stats.volume, units).replace(` ${units}`, '')}</span><span className="l">volume {units}</span></div></div>
           </div>
-          {stats.sets === 0 ? <p className="small text-2">Non hai completato nessuna serie: non c’è nulla da salvare. Puoi continuare o annullare l’allenamento.</p>
-            : pending > 0 ? <p className="small text-2"><StickyNote size={14} style={{ verticalAlign: -2 }} /> {pending} serie non completate verranno rimosse dal riepilogo (quelle con dati inseriti restano visibili ma non conteggiate).</p>
+          {cardioLogs.length > 0 && <p className="small text-2"><Bike size={14} style={{ verticalAlign: -2 }} /> Cardio: {cardioDone}/{cardioLogs.length} attività, {cardioDoneMin} min svolti su {cardioPlannedMin} previsti.{cardioLogs.some((e) => !e.cardio!.done && timerElapsedMs(e.cardio!.timer) >= 60000) ? ' Le attività non terminate vengono salvate con il tempo svolto e i parametri previsti.' : ''}</p>}
+          {stats.sets === 0 && cardioDone === 0 ? <p className="small text-2">Non hai completato nessuna serie: non c’è nulla da salvare. Puoi continuare o annullare l’allenamento.</p>
+            : stats.sets === 0 ? null : pending > 0 ? <p className="small text-2"><StickyNote size={14} style={{ verticalAlign: -2 }} /> {pending} serie non completate verranno rimosse dal riepilogo (quelle con dati inseriti restano visibili ma non conteggiate).</p>
               : <p className="small text-2">Tutte le serie completate. Ottimo lavoro!</p>}
         </div>
       </Sheet>

@@ -33,13 +33,17 @@ export function buildContext(d: CoachData) {
     programmaAttivo: d.program ? { nome: d.program.name, calendario: d.program.schedule.map((id, i) => ({ giorno: ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'][i], schedaId: id })) } : null,
     schede: d.templates.filter((x) => tplIds.has(x.id) || d.templates.length <= 8).map((x) => ({
       id: x.id, nome: x.name,
-      esercizi: x.exercises.map((e) => ({ uid: e.uid, esercizioId: e.exerciseId, nome: getExercise(e.exerciseId)?.name, serie: e.sets, rip: `${e.repMin}-${e.repMax}`, recuperoSec: e.restSec, caricoTargetKg: e.targetWeight ?? null })),
+      esercizi: x.exercises.map((e) => (e.cardio
+        ? { uid: e.uid, esercizioId: e.exerciseId, nome: getExercise(e.exerciseId)?.name, cardio: { macchina: e.cardio.machine, modalita: e.cardio.mode, minuti: e.cardio.durationMin, velocitaKmh: e.cardio.speedKmh ?? null, pendenza: e.cardio.inclinePct ?? null, resistenza: e.cardio.resistance ?? null, intensita: e.cardio.intensity } }
+        : { uid: e.uid, esercizioId: e.exerciseId, nome: getExercise(e.exerciseId)?.name, serie: e.sets, rip: `${e.repMin}-${e.repMax}`, recuperoSec: e.restSec, caricoTargetKg: e.targetWeight ?? null })),
     })),
     ultimiAllenamenti: done.slice(-12).map((s) => {
       const st = sessionStats(s);
       return {
         data: s.startedAt.slice(0, 10), nome: s.name, durataMin: Math.round(st.durationMs / 60000), volumeKg: Math.round(st.volume), record: s.prs?.length ?? 0,
-        esercizi: s.exercises.map((e) => ({ id: e.exerciseId, nome: getExercise(e.exerciseId)?.name, serie: e.sets.filter((x) => x.done).map((x) => `${x.weight ?? 0}x${x.reps ?? 0}${x.rpe ? `@${x.rpe}` : ''}`) })),
+        esercizi: s.exercises.map((e) => (e.cardio?.actual
+          ? { id: e.exerciseId, nome: getExercise(e.exerciseId)?.name, cardio: { previstiMin: e.cardio.plan.durationMin, svoltiMin: Math.round(e.cardio.actual.durationSec / 60), kmh: e.cardio.actual.speedKmh ?? null, pendenza: e.cardio.actual.inclinePct ?? null, resistenza: e.cardio.actual.resistance ?? null, km: e.cardio.actual.distanceKm ?? null } }
+          : { id: e.exerciseId, nome: getExercise(e.exerciseId)?.name, serie: e.sets.filter((x) => x.done).map((x) => `${x.weight ?? 0}x${x.reps ?? 0}${x.rpe ? `@${x.rpe}` : ''}`) })),
       };
     }),
     totaleAllenamenti: done.length,
