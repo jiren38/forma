@@ -1143,3 +1143,102 @@ a.card.row, a.card.col { display: flex; }
 .nav-item.active::after { top: 6px; bottom: auto; }
 /* Coach: la casella di testo copre i messaggi che le scorrono sotto */
 .chat-input { background: var(--bg); box-shadow: 0 -12px 16px var(--bg); }
+
+/* ==========================================================
+   Smartphone: adattamento a iPhone e Android
+   (browser e app aggiunta alla schermata Home)
+   ========================================================== */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+@supports (height: 100dvh) {
+  .player, .ob, .auth, .full-center { min-height: 100dvh; }
+}
+.main { padding-top: env(safe-area-inset-top, 0px); padding-left: max(var(--gutter), env(safe-area-inset-left, 0px)); padding-right: max(var(--gutter), env(safe-area-inset-right, 0px)); padding-bottom: calc(var(--nav-h) + var(--safe-b) + 28px); }
+.player { padding-top: env(safe-area-inset-top, 0px); }
+
+/* Accesso: la scheda resta dentro lo schermo */
+.auth { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + var(--safe-b)); background-attachment: scroll; }
+.auth-card { min-width: 0; }
+
+/* Barra inferiore ancorata al bordo: niente contenuti che spuntano sotto */
+.bottom-nav {
+  left: 0; right: 0; bottom: 0; max-width: none; margin: 0; border-radius: 22px 22px 0 0; border-width: 1px 0 0;
+  height: calc(var(--nav-h) + var(--safe-b)); padding: 0 max(6px, env(safe-area-inset-right, 0px)) var(--safe-b) max(6px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--bg-2) 94%, transparent); box-shadow: 0 -12px 32px rgba(0,0,0,.28);
+  align-items: stretch;
+}
+.bottom-nav::after { display: none; }
+.nav-item { height: var(--nav-h); }
+.nav-item.center .nav-fab { transform: translateY(-12px); }
+.nav-item.center.active .nav-fab { transform: translateY(-12px) scale(1.04); }
+.nav-item.center span { bottom: 8px; }
+@media (min-width: 640px) { .bottom-nav { border-radius: 0; } }
+.chat-input { bottom: calc(var(--nav-h) + var(--safe-b)); padding: 10px 0 12px; }
+@media (min-width: 1024px) { .chat-input { bottom: 0; } }
+
+@media (max-width: 639px) {
+  :root { --fs-display: clamp(27px, 7.6vw, 32px); }
+
+  /* Le illustrazioni stanno in una fascia in alto, il testo sotto: mai sovrapposti */
+  .sec-hero-art, .tday-art, .xp-art { background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--art-c) 30%, #0a0b0d), #0a0b0d 70%); }
+  .sec-hero-art .art-svg, .sec-hero-art .art-photo, .tday-art .art-svg, .tday-art .art-photo, .xp-art .art-svg, .xp-art .art-photo {
+    inset: 0 0 auto 0; height: var(--band, 160px); transform: none;
+    -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); mask-image: linear-gradient(180deg, #000 55%, transparent);
+  }
+  .sec-hero-art .art-shade, .tday-art .art-shade, .xp-art .art-shade { background: linear-gradient(90deg, rgba(7,8,10,.55), rgba(7,8,10,0) 60%); height: var(--band, 160px); bottom: auto; }
+
+  .sec-hero { min-height: 0; --band: 150px; }
+  .sec-hero.compact { --band: 136px; }
+  .sec-hero-art .art-fig { top: 10px; bottom: auto; right: 12px; height: calc(var(--band) - 18px); max-width: 52%; }
+  .sec-hero-ic { display: none; }
+  .sec-hero-body { margin-top: calc(var(--band) - 70px); padding: 4px 16px 16px; }
+  .sec-hero p { max-width: none; font-size: 14px; }
+  .sec-hero-actions { margin-top: 8px; }
+  .sec-hero-actions .btn { height: 44px; padding: 0 16px; font-size: 14.5px; }
+
+  .tday { min-height: 0; justify-content: flex-start; --band: 170px; }
+  .tday-art .art-fig { top: 8px; bottom: auto; right: 10px; height: 150px; max-width: 55%; }
+  .tday-body { padding: 160px 16px 16px; }
+  .tday-title { font-size: clamp(25px, 7.4vw, 31px); }
+  .tday-actions .btn.lg { height: 50px; }
+
+  .xp-card { min-height: 0 !important; display: flex; flex-direction: column; --band: 160px; }
+  .xp-tall { --band: 138px; }
+  .xp-body { position: relative; inset: auto; flex: 1; justify-content: flex-end; padding: calc(var(--band) - 10px) 14px 14px; }
+  .xp-hero .art-fig, .xp-wide .art-fig { top: 12px; bottom: auto; right: 58px; height: calc(var(--band) - 20px); max-width: 50%; }
+  .xp-tall .art-fig { top: 30px; bottom: auto; left: 0; right: 0; margin: 0 auto; height: calc(var(--band) - 36px); max-width: 80%; }
+  .xp-hero .xp-text h2 { font-size: 26px; }
+  .xp-text h2 { font-size: 19px; }
+
+  /* Profilo: gli anelli non passano sotto il nome */
+  .profile-art .art-svg { opacity: .55; -webkit-mask-image: linear-gradient(90deg, transparent 35%, #000 85%); mask-image: linear-gradient(90deg, transparent 35%, #000 85%); }
+  .profile-body { padding: 16px; }
+  .profile-stats > div { padding: 9px 10px; min-width: 0; }
+  .profile-stats b { font-size: 17px; white-space: nowrap; }
+
+  /* Accessi rapidi e attività: griglia invece di righe tagliate dal bordo */
+  .quick, .act-grid { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-columns: unset; overflow: visible; margin: 0; padding: 0; gap: 8px; }
+}
+@media (max-width: 359px) {
+  .quick, .act-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stepper .icon-btn { width: 34px; height: 34px; }
+  .stepper { gap: 4px; }
+}
+@media (max-width: 639px) {
+  /* la riga con percorso e pulsanti resta libera dall'illustrazione */
+  .sec-hero-art .art-svg, .sec-hero-art .art-photo { top: 44px; height: calc(var(--band) - 24px); }
+  .sec-hero-art .art-fig { top: 46px; height: calc(var(--band) - 54px); }
+}
+.nutri-main > .ring-wrap { flex-shrink: 0; }
+@media (max-width: 379px) {
+  .nutri-main { flex-direction: column; align-items: stretch; text-align: center; }
+  .nutri-main > .ring-wrap { align-self: center; }
+  .nutri-main .col { align-items: center; }
+  .nav-item { font-size: 9.5px; letter-spacing: 0; }
+  .nav-item.center span { display: none; }
+  .nav-item.center .nav-fab { width: 46px; height: 46px; }
+}
+@media (max-width: 379px) { .goals-grid { grid-template-columns: minmax(0, 1fr) !important; } }
+/* Sessione live: etichetta Forza/Cardio in una fascia propria, nome troncato prima del menu */
+.live-ex { padding-top: 26px !important; }
+.live-ex a.ellipsis { display: block; }
+.live-kind { right: auto; left: 18px; }
