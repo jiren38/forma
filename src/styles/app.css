@@ -131,7 +131,7 @@ p { margin: 0; }
 /* ---------- Shell ---------- */
 .app-shell { min-height: 100%; display: flex; }
 .main { flex: 1; min-width: 0; padding: 0 var(--gutter) calc(var(--nav-h) + var(--safe-b) + 40px); max-width: 780px; margin: 0 auto; width: 100%; }
-.page { padding-top: 8px; animation: pageIn .42s var(--ease) both; }
+.page { padding-top: 8px; animation: pageIn .42s var(--ease) backwards; }
 @keyframes pageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 /* Comparsa progressiva dei blocchi principali */
 .page > * { animation: rise .5s var(--ease) both; }
@@ -1242,3 +1242,13 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .live-ex { padding-top: 26px !important; }
 .live-ex a.ellipsis { display: block; }
 .live-kind { right: auto; left: 18px; }
+
+/* Diario prodotti e lista della spesa */
+.product-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.product-actions .btn { min-width: 0; white-space: normal; line-height: 1.2; text-align: center; padding-inline: 10px; }
+@media (max-width: 359px) { .product-actions { grid-template-columns: minmax(0, 1fr); } }
+.product-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.shop-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.shop-tools .btn { min-width: 0; }
+.shop-item-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.icon-btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }

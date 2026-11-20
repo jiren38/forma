@@ -12,7 +12,9 @@ export const DEFAULT_SETTINGS: Settings = {
   waterGoalMl: 2000, sleepGoalH: 8, nutritionOverride: null,
 };
 
-export interface Meta { favorites: string[]; recent: string[]; favoriteFoods: string[]; recentFoods: string[]; shoppingChecked: string[]; shoppingExtra?: { id: string; name: string }[]; lastSummaryWeek?: string; lastReminder?: Record<string, string> }
+/** Articolo aggiunto a mano o da un prodotto (foodId) alla lista della spesa. */
+export interface ShoppingExtra { id: string; name: string; foodId?: string; brand?: string; imageUrl?: string }
+export interface Meta { favorites: string[]; recent: string[]; favoriteFoods: string[]; recentFoods: string[]; shoppingChecked: string[]; shoppingExtra?: ShoppingExtra[]; lastSummaryWeek?: string; lastReminder?: Record<string, string> }
 const DEFAULT_META: Meta = { favorites: [], recent: [], favoriteFoods: [], recentFoods: [], shoppingChecked: [] };
 
 export function useProfile(): Profile | undefined { return useCollection<Profile>('profile').find((p: any) => p.id === 'me'); }

@@ -63,6 +63,7 @@ export const SECTIONS: Record<SectionKey, Section> = {
     links: [
       { label: 'Diario alimentare', to: '/nutrition' },
       { label: 'Scanner codice a barre', to: '/nutrition/scan' },
+      { label: 'Diario prodotti', to: '/nutrition/scanned' },
       { label: 'Cerca alimenti', to: '/nutrition/add' },
       { label: 'Ricette', to: '/nutrition/recipes' },
       { label: 'Piano pasti', to: '/nutrition/plan' },
@@ -123,7 +124,7 @@ const ROUTES: [RegExp, RouteMeta][] = [
   [/^\/nutrition\/shopping/, { section: 'nutrition', crumb: 'Spesa', desc: 'Gli ingredienti del piano pasti, raggruppati e da spuntare.' }],
   [/^\/nutrition\/targets/, { section: 'nutrition', crumb: 'Obiettivi', desc: 'Calorie e macronutrienti calcolati dal tuo profilo, modificabili.' }],
   [/^\/nutrition\/foods/, { section: 'nutrition', crumb: 'I miei alimenti', desc: 'Alimenti e prodotti creati o modificati da te.' }],
-  [/^\/nutrition\/scanned/, { section: 'nutrition', crumb: 'Scansionati' }],
+  [/^\/nutrition\/scanned/, { section: 'nutrition', crumb: 'Diario prodotti' }],
   [/^\/nutrition\/product\//, { section: 'nutrition', crumb: 'Prodotto' }],
   [/^\/nutrition/, { section: 'nutrition', desc: 'Il diario di oggi, le calorie e i macronutrienti.' }],
   [/^\/energy/, { section: 'progress', crumb: 'Bilancio calorico' }],

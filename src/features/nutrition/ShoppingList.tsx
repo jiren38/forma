@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Plus, Trash2, Check, ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
-import { useMealPlans, useMeta, patchMeta } from '@/app/data';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ShoppingCart, Plus, Trash2, Check, ChevronLeft, ChevronRight, Share2, ScanBarcode, BookmarkCheck } from 'lucide-react';
+import { useCustomFoods, useMealPlans, useMeta, patchMeta } from '@/app/data';
 import { store } from '@/db/store';
 import { addDays, dayKey, fmtN, fromKey, startOfWeek, uid } from '@/lib/util';
 import { PageHeader, Empty, useToast } from '@/components/ui';
 import { findFood } from './common';
-import type { Recipe } from '@/lib/types';
+import type { Food, Recipe } from '@/lib/types';
+import { ProductImage } from './ProductPage';
+import { unlockAudio } from './scanner/feedback';
 
 export default function ShoppingList() {
   const toast = useToast();
+  const nav = useNavigate();
+  const foods = useCustomFoods();
+  const foodOf = (id?: string) => (id ? foods.find((f) => f.id === id) : undefined) as Food | undefined;
   const [sp, setSp] = useSearchParams();
   const ws = sp.get('week') ? fromKey(sp.get('week')!) : startOfWeek();
   const wk = dayKey(ws);
@@ -51,7 +56,7 @@ export default function ShoppingList() {
   const fmtQ = (g: number, unit?: string, ug?: number) => (g >= 1000 ? `${fmtN(g / 1000, 2)} kg` : `${Math.round(g)} g`) + (unit && ug ? ` (~${fmtN(g / ug, 1)} ${unit})` : '');
 
   async function share() {
-    const text = ['Lista della spesa', ...items.flatMap(([c, l]) => [`\n${c}`, ...l.map((x) => `- ${x.name}: ${fmtQ(x.grams, x.unit, x.unitGrams)}`)]), ...(extras.length ? ['\nAltro', ...extras.map((x) => `- ${x.name}`)] : [])].join('\n');
+    const text = ['Lista della spesa', ...items.flatMap(([c, l]) => [`\n${c}`, ...l.map((x) => `- ${x.name}: ${fmtQ(x.grams, x.unit, x.unitGrams)}`)]), ...(extras.length ? ['\nAggiunti da te', ...extras.map((x) => `- ${x.name}${x.brand && !x.name.toLowerCase().includes(x.brand.toLowerCase()) ? ` (${x.brand})` : ''}`)] : [])].join('\n');
     try {
       if (navigator.share) await navigator.share({ title: 'Lista della spesa', text });
       else { await navigator.clipboard.writeText(text); toast('Lista copiata negli appunti'); }
@@ -72,8 +77,12 @@ export default function ShoppingList() {
         <input className="input grow" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Aggiungi un articolo (es. detersivo)" aria-label="Nuovo articolo" maxLength={60} />
         <button className="btn" type="submit" aria-label="Aggiungi articolo"><Plus size={18} /></button>
       </form>
+      <div className="shop-tools">
+        <button className="btn primary" onClick={() => { unlockAudio(); nav('/nutrition/scan?to=shopping'); }}><ScanBarcode size={18} /> Scansiona</button>
+        <Link className="btn" to="/nutrition/scanned?to=shopping"><BookmarkCheck size={18} /> Diario prodotti</Link>
+      </div>
       {total === 0 ? (
-        <Empty icon={<ShoppingCart />} title="Lista vuota" text="La lista si genera automaticamente dal piano pasti della settimana (ingredienti delle ricette inclusi)." action={<Link to="/nutrition/plan" className="btn primary">Apri il piano pasti</Link>} />
+        <Empty icon={<ShoppingCart />} title="Lista vuota" text="La lista si genera dal piano pasti della settimana (ingredienti delle ricette inclusi). Puoi anche scansionare un prodotto o prenderlo dal diario prodotti." action={<Link to="/nutrition/plan" className="btn primary">Apri il piano pasti</Link>} />
       ) : (
         <>
           {items.map(([cat, list]) => (
@@ -91,15 +100,26 @@ export default function ShoppingList() {
           ))}
           {extras.length > 0 && (
             <section>
-              <div className="section-title" style={{ marginTop: 8 }}>Altro</div>
+              <div className="section-title" style={{ marginTop: 8 }}>Aggiunti da te</div>
               <div className="settings-group">
-                {extras.map((x) => (
+                {extras.map((x) => {
+                  const f = foodOf(x.foodId);
+                  const done = checked.has(key(x.id));
+                  return (
                   <div key={x.id} className="list-item">
-                    <button className={`set-check ${checked.has(key(x.id)) ? 'on' : ''}`} style={{ width: 28, height: 28, margin: 0 }} onClick={() => toggle(x.id)} aria-pressed={checked.has(key(x.id))} aria-label={`Segna ${x.name}`}><Check size={15} strokeWidth={3} /></button>
-                    <span className="grow li-title" style={{ textDecoration: checked.has(key(x.id)) ? 'line-through' : 'none' }}>{x.name}</span>
-                    <button className="icon-btn ghost" onClick={() => patchMeta({ shoppingExtra: extras.filter((y) => y.id !== x.id) })} aria-label={`Rimuovi ${x.name}`}><Trash2 size={16} /></button>
+                    <button className={`set-check ${done ? 'on' : ''}`} style={{ width: 28, height: 28, margin: 0, flexShrink: 0 }} onClick={() => toggle(x.id)} aria-pressed={done} aria-label={`Segna ${x.name}`}><Check size={15} strokeWidth={3} /></button>
+                    {f?.barcode ? (
+                      <button className="shop-item-main" onClick={() => nav(`/nutrition/product/${f.barcode}`)} style={{ opacity: done ? 0.55 : 1 }} aria-label={`Apri la scheda di ${x.name}`}>
+                        <ProductImage src={f.imageUrl ?? x.imageUrl} size="sm" />
+                        <span className="grow" style={{ minWidth: 0, textDecoration: done ? 'line-through' : 'none' }}><div className="li-title ellipsis">{f.name}</div>{(f.brand ?? x.brand) && <div className="li-sub ellipsis">{f.brand ?? x.brand}</div>}</span>
+                      </button>
+                    ) : (
+                      <span className="grow li-title" style={{ minWidth: 0, textDecoration: done ? 'line-through' : 'none' }}>{x.name}</span>
+                    )}
+                    <button className="icon-btn ghost" style={{ flexShrink: 0 }} onClick={() => patchMeta({ shoppingExtra: extras.filter((y) => y.id !== x.id) })} aria-label={`Rimuovi ${x.name}`}><Trash2 size={16} /></button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
