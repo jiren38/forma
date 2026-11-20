@@ -66,7 +66,8 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
   const next = phases[pos.index + 1];
 
   return (
-    <section className="card cardio-card" style={{ padding: 14 }} aria-label={e?.name}>
+    <section className="card cardio-card live-ex cardio" aria-label={e?.name}>
+      <span className="live-kind"><HeartPulse size={12} /> Cardio</span>
       <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
         <CardioIcon machine={plan.machine} play={c.timer.running} size={56} />
         <div className="grow" style={{ minWidth: 0 }}>

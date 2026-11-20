@@ -240,6 +240,12 @@ export default function LiveWorkout() {
             <button className="btn sm primary" onClick={() => setFinishOpen(true)}><Flag size={15} /> Fine</button>
           </div>
         </div>
+        {(totalSets > 0 || cardioLogs.length > 0) && (
+          <div className="player-progress" role="progressbar" aria-label="Avanzamento allenamento" aria-valuemin={0} aria-valuemax={100}
+            aria-valuenow={Math.round(((stats.sets + cardioLogs.filter((c) => c.cardio?.done).length) / Math.max(1, totalSets + cardioLogs.length)) * 100)}>
+            <i style={{ width: `${((stats.sets + cardioLogs.filter((c) => c.cardio?.done).length) / Math.max(1, totalSets + cardioLogs.length)) * 100}%` }} />
+          </div>
+        )}
       </div>
 
       <div className="page stack" style={{ maxWidth: 760, margin: '0 auto' }}>
@@ -266,15 +272,16 @@ export default function LiveWorkout() {
           const animOpen = showAnim === ex.uid;
           let normalIdx = 0;
           return (
-            <section key={ex.uid} className="card" style={{ padding: 14 }} aria-label={e.name}>
-              <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                <button className="ex-thumb" style={{ border: 0, padding: 0, cursor: 'pointer' }} onClick={() => setShowAnim(animOpen ? null : ex.uid)} aria-label={animOpen ? 'Nascondi animazione' : 'Mostra animazione'} aria-expanded={animOpen}>
+            <section key={ex.uid} className={`card live-ex ${doneN === ex.sets.length && doneN > 0 ? 'complete' : ''}`} aria-label={e.name}>
+              <span className="live-kind"><Dumbbell size={12} /> Forza</span>
+              <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+                <button className="ex-thumb live-thumb" style={{ border: 0, padding: 0, cursor: 'pointer' }} onClick={() => setShowAnim(animOpen ? null : ex.uid)} aria-label={animOpen ? 'Nascondi animazione' : 'Mostra animazione'} aria-expanded={animOpen}>
                   <ExerciseVisual exerciseId={e.id} patternId={e.pattern} muscles={e.primary} className="thumb" label={e.name} />
                 </button>
                 <div className="grow" style={{ minWidth: 0 }}>
                   <Link to={`/exercises/${e.id}`} style={{ fontWeight: 700, fontSize: 16 }} className="ellipsis">{e.name}</Link>
                   <div className="tiny muted">{ex.sets.length} serie · {ex.repMin}{ex.repMax !== ex.repMin ? `–${ex.repMax}` : ''} {e.tracking === 'time' ? 's' : e.tracking === 'cardio' ? 'min' : 'rip.'} · recupero {formatClock(ex.restSec)}</div>
-                  <div className="tiny" style={{ marginTop: 2, color: doneN === ex.sets.length && doneN > 0 ? 'var(--success)' : 'var(--muted)' }}>{doneN}/{ex.sets.length} completate</div>
+                  <div className="pips" aria-label={`${doneN} serie su ${ex.sets.length} completate`}>{ex.sets.map((x) => <i key={x.uid} className={x.done ? 'on' : ''} />)}<span>{doneN}/{ex.sets.length}</span></div>
                 </div>
                 <button className="icon-btn ghost" onClick={() => setExMenu(ex)} aria-label={`Opzioni ${e.name}`}><MoreHorizontal size={20} /></button>
               </div>

@@ -8,6 +8,7 @@ import { useAuth } from '@/app/auth';
 import { store } from '@/db/store';
 import { supabase } from '@/db/supabase';
 import { buildContext, localCoachReply, type CoachData } from '@/lib/coach-local';
+import { SectionHero } from '@/design/SectionHero';
 import { PageHeader, Confirm, useToast, Chips } from '@/components/ui';
 import { getExercise } from '@/data/exercises';
 import { uid } from '@/lib/util';
@@ -110,7 +111,9 @@ export default function CoachPage() {
 
   return (
     <div className="page" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - var(--nav-h, 64px))' }}>
-      <PageHeader title="Coach" back sub={cloud ? 'Personal trainer AI basato sui tuoi dati' : 'Analisi dei tuoi dati'} right={thread.messages.length ? <button className="icon-btn ghost" onClick={() => setClear(true)} aria-label="Cancella conversazione"><Trash2 size={18} /></button> : undefined} />
+      {thread.messages.length
+        ? <PageHeader title="Coach AI" back sub={cloud ? 'Personal trainer AI basato sui tuoi dati' : 'Analisi dei tuoi dati'} right={<button className="icon-btn ghost" onClick={() => setClear(true)} aria-label="Cancella conversazione"><Trash2 size={18} /></button>} />
+        : <SectionHero section="coach" compact title="Personal Trainer AI" desc={cloud ? 'Chiedi analisi dei tuoi allenamenti, consigli su carichi, recupero e alimentazione: risponde sui tuoi dati.' : 'Analisi dei tuoi allenamenti, progressi e alimentazione basata sui tuoi dati.'} />}
       {!cloud && (
         <div className="banner" style={{ marginBottom: 12 }}><Cpu size={18} /><span>Stai usando il coach locale: risposte basate su regole e sui tuoi dati, senza inviare nulla all’esterno. Il coach AI conversazionale si attiva con l’account cloud quando l’app è collegata al backend.</span></div>
       )}

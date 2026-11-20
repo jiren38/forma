@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Copy, Save, BookOpen, CalendarRange, ShoppingCart, Target, Apple, Info, Bookmark, Trash2, ScanBarcode, History, Flame } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Copy, Save, BookOpen, CalendarRange, ShoppingCart, Target, Apple, Info, Bookmark, Trash2, ScanBarcode, History, Flame, Search, Coffee, Sun, Cookie, Moon, Utensils } from 'lucide-react';
 import { unlockAudio } from './scanner/feedback';
 import { useActiveProgram, useDiary, useProfile, useSavedMeals, useSettings } from '@/app/data';
 import { store } from '@/db/store';
@@ -8,10 +8,15 @@ import { targetsFor, nutritionTrend } from '@/lib/insights';
 import { totals } from '@/lib/nutrition';
 import { MEAL_LABEL, MEAL_ORDER } from '@/lib/labels';
 import { addDays, dayKey, formatLongDate, fromKey, fmtN, uid } from '@/lib/util';
-import { PageHeader, Ring, MacroBar, Sheet, useToast } from '@/components/ui';
+import { Ring, Sheet, useToast } from '@/components/ui';
+import { SectionHero } from '@/design/SectionHero';
 import { BarChart } from '@/components/charts';
 import { MacroLine, QuantitySheet, findFood } from './common';
 import type { DiaryEntry, MealSlot, SavedMeal } from '@/lib/types';
+
+const MEAL_ICON: Record<MealSlot, React.ReactNode> = {
+  breakfast: <Coffee size={18} />, snack_am: <Cookie size={18} />, lunch: <Sun size={18} />, snack_pm: <Apple size={18} />, dinner: <Moon size={18} />, other: <Utensils size={18} />,
+};
 
 export default function NutritionPage() {
   const nav = useNavigate();
@@ -60,41 +65,43 @@ export default function NutritionPage() {
 
   return (
     <div className="page stack">
-      <PageHeader title="Nutrizione" right={<Link to="/nutrition/targets" className="icon-btn" aria-label="Obiettivi nutrizionali"><Target size={20} /></Link>} />
+      <SectionHero section="nutrition" compact title="Nutrizione" desc="Diario, calorie e macronutrienti. Scansiona un prodotto o cerca un alimento."
+        right={<><Link to={`/nutrition/scanned${isToday ? '' : `?date=${date}`}`} className="icon-btn" aria-label="Prodotti scansionati"><History size={19} /></Link><Link to="/nutrition/targets" className="icon-btn" aria-label="Obiettivi nutrizionali"><Target size={19} /></Link></>}
+        actions={<>
+          <button className="btn primary" onClick={() => { unlockAudio(); nav(`/nutrition/scan${isToday ? '' : `?date=${date}`}`); }}><ScanBarcode size={19} /> Scansiona</button>
+          <Link to={`/nutrition/add?date=${date}`} className="btn"><Search size={17} /> Cerca alimento</Link>
+        </>} />
 
-      <div className="row-between card" style={{ padding: 8 }}>
+      <div className="date-nav">
         <button className="icon-btn ghost" onClick={() => setDate(dayKey(addDays(fromKey(date), -1)))} aria-label="Giorno precedente"><ChevronLeft size={20} /></button>
         <label className="center" style={{ cursor: 'pointer', position: 'relative' }}>
           <b>{isToday ? 'Oggi' : formatLongDate(fromKey(date))}</b>
-          {!isToday && <div className="tiny accent" onClick={(e) => { e.preventDefault(); setDate(dayKey()); }}>Torna a oggi</div>}
+          {!isToday ? <div className="tiny accent" onClick={(e) => { e.preventDefault(); setDate(dayKey()); }}>Torna a oggi</div> : <div className="tiny muted">{formatLongDate(fromKey(date))}</div>}
           <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Scegli data" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
         </label>
         <button className="icon-btn ghost" onClick={() => setDate(dayKey(addDays(fromKey(date), 1)))} aria-label="Giorno successivo"><ChevronRight size={20} /></button>
       </div>
 
-      <div className="scan-cta">
-        <button className="btn primary lg grow" onClick={() => { unlockAudio(); nav(`/nutrition/scan${isToday ? '' : `?date=${date}`}`); }}><ScanBarcode size={20} /> Scansiona prodotto</button>
-        <Link to={`/nutrition/scanned${isToday ? '' : `?date=${date}`}`} className="btn lg" aria-label="Prodotti scansionati"><History size={19} /><span className="hide-xs">Scansionati</span></Link>
-      </div>
-
       <div className="desk-2">
         <div className="stack">
-          <section className="card" aria-label="Riepilogo calorie e macronutrienti">
-            <div className="row" style={{ gap: 18, alignItems: 'center' }}>
-              <Ring value={tot.kcal} max={t.kcal} size={128} stroke={12}>
-                <div><div className="num" style={{ fontSize: 24, fontWeight: 700 }}>{fmtN(Math.abs(t.kcal - tot.kcal))}</div><div className="tiny muted">{tot.kcal > t.kcal ? 'kcal in più' : 'kcal rimaste'}</div></div>
+          <section className="card nutri-sum" aria-label="Riepilogo calorie e macronutrienti">
+            <div className="nutri-main">
+              <Ring value={tot.kcal} max={t.kcal} size={136} stroke={13} color="var(--c-nutrition)">
+                <div><div className="num" style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>{fmtN(Math.abs(t.kcal - tot.kcal))}</div><div className="tiny muted" style={{ marginTop: 4 }}>{tot.kcal > t.kcal ? 'kcal in più' : 'kcal rimaste'}</div></div>
               </Ring>
-              <div className="col grow" style={{ gap: 10 }}>
-                <div className="row-between small"><span className="muted">Assunte</span><b className="num">{fmtN(tot.kcal)} kcal</b></div>
-                <div className="row-between small"><span className="muted">Obiettivo</span><b className="num">{fmtN(t.kcal)} kcal</b></div>
+              <div className="col grow" style={{ gap: 8 }}>
+                <div><span className="eyebrow">Assunte</span><div className="num" style={{ fontSize: 24, fontWeight: 700 }}>{fmtN(tot.kcal)} <span className="small muted">/ {fmtN(t.kcal)} kcal</span></div></div>
                 <Link to="/nutrition/targets" className="tiny muted row" style={{ gap: 4 }}><Info size={12} /> {t.overridden ? 'Obiettivo personalizzato' : 'Stima indicativa'} · dettagli</Link>
                 <Link to={`/energy${isToday ? '' : `?p=day&d=${date}`}`} className="tiny accent row" style={{ gap: 4, fontWeight: 600 }}><Flame size={12} /> Bilancio con gli allenamenti</Link>
               </div>
             </div>
-            <div className="stack-sm" style={{ marginTop: 14 }}>
-              <MacroBar label="Proteine" value={tot.protein} max={t.protein} color="var(--protein)" />
-              <MacroBar label="Carboidrati" value={tot.carbs} max={t.carbs} color="var(--carbs)" />
-              <MacroBar label="Grassi" value={tot.fat} max={t.fat} color="var(--fat)" />
+            <div className="macro-rings">
+              {([['Proteine', tot.protein, t.protein, 'var(--protein)'], ['Carboidrati', tot.carbs, t.carbs, 'var(--carbs)'], ['Grassi', tot.fat, t.fat, 'var(--fat)']] as const).map(([l, v, m, c]) => (
+                <div key={l} className="mr">
+                  <Ring value={v} max={m} size={58} stroke={6} color={c}><b className="num" style={{ fontSize: 13 }}>{Math.round(m > 0 ? (v / m) * 100 : 0)}%</b></Ring>
+                  <div><b className="small">{l}</b><div className="tiny muted"><b className="num" style={{ color: 'var(--text)' }}>{Math.round(v)}</b> / {Math.round(m)} g</div></div>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -102,9 +109,10 @@ export default function NutritionPage() {
             const items = day.filter((d) => d.slot === slot);
             const st = totals(items);
             return (
-              <section key={slot} className="card" style={{ padding: 14 }} aria-label={MEAL_LABEL[slot]}>
+              <section key={slot} className={`card meal ${items.length ? '' : 'empty-meal'}`} aria-label={MEAL_LABEL[slot]}>
                 <div className="meal-head">
-                  <div><h3>{MEAL_LABEL[slot]}</h3>{items.length > 0 && <MacroLine {...st} />}</div>
+                  <span className="meal-ic">{MEAL_ICON[slot]}</span>
+                  <div className="grow" style={{ minWidth: 0 }}><h3>{MEAL_LABEL[slot]}</h3>{items.length > 0 ? <MacroLine {...st} /> : <span className="tiny muted">Nessun alimento</span>}</div>
                   <div className="row" style={{ gap: 4 }}>
                     <button className="icon-btn ghost" onClick={() => setMealMenu(slot)} aria-label={`Opzioni ${MEAL_LABEL[slot]}`}><MoreHorizontal size={18} /></button>
                     <button className="icon-btn soft" onClick={() => nav(`/nutrition/add?slot=${slot}&date=${date}`)} aria-label={`Aggiungi a ${MEAL_LABEL[slot]}`}><Plus size={18} /></button>
@@ -126,17 +134,17 @@ export default function NutritionPage() {
         </div>
 
         <div className="stack">
-          <div className="grid-2">
-            <Link to="/nutrition/recipes" className="card clickable col" style={{ gap: 6 }}><BookOpen size={20} className="accent" /><b className="small">Ricette</b><span className="tiny muted">Crea piatti e calcola i valori</span></Link>
-            <Link to="/nutrition/plan" className="card clickable col" style={{ gap: 6 }}><CalendarRange size={20} className="accent" /><b className="small">Piano pasti</b><span className="tiny muted">Organizza la settimana</span></Link>
-            <Link to="/nutrition/shopping" className="card clickable col" style={{ gap: 6 }}><ShoppingCart size={20} className="accent" /><b className="small">Lista della spesa</b><span className="tiny muted">Dal piano pasti</span></Link>
-            <Link to="/nutrition/foods" className="card clickable col" style={{ gap: 6 }}><Apple size={20} className="accent" /><b className="small">I miei alimenti</b><span className="tiny muted">Personalizzati e preferiti</span></Link>
+          <div className="tool-grid" style={{ ['--sc' as string]: 'var(--c-nutrition)' } as React.CSSProperties}>
+            <Link to="/nutrition/recipes" className="tool"><span className="t-ic"><BookOpen size={20} /></span><b>Ricette</b><span>Crea piatti e calcola i valori</span></Link>
+            <Link to="/nutrition/plan" className="tool"><span className="t-ic"><CalendarRange size={20} /></span><b>Piano pasti</b><span>Organizza la settimana</span></Link>
+            <Link to="/nutrition/shopping" className="tool"><span className="t-ic"><ShoppingCart size={20} /></span><b>Lista della spesa</b><span>Dal piano pasti</span></Link>
+            <Link to="/nutrition/foods" className="tool"><span className="t-ic"><Apple size={20} /></span><b>I miei alimenti</b><span>Personalizzati e preferiti</span></Link>
           </div>
           <section className="card">
             <div className="card-title"><h3>Ultimi 7 giorni</h3><span className="tiny muted">kcal</span></div>
             {week.some((d) => d.logged) ? (
               <>
-                <BarChart ariaLabel="Calorie degli ultimi 7 giorni" data={week.map((d) => ({ label: fromKey(d.date).toLocaleDateString('it-IT', { weekday: 'short' }).slice(0, 3), value: d.kcal }))} highlightLast />
+                <BarChart color="var(--c-nutrition)" ariaLabel="Calorie degli ultimi 7 giorni" data={week.map((d) => ({ label: fromKey(d.date).toLocaleDateString('it-IT', { weekday: 'short' }).slice(0, 3), value: d.kcal }))} highlightLast />
                 <div className="tiny muted" style={{ marginTop: 6 }}>Media giorni registrati: <b>{fmtN(week.filter((d) => d.logged).reduce((a, d) => a + d.kcal, 0) / Math.max(1, week.filter((d) => d.logged).length))} kcal</b> · proteine medie {fmtN(week.filter((d) => d.logged).reduce((a, d) => a + d.protein, 0) / Math.max(1, week.filter((d) => d.logged).length))} g (obiettivo {t.protein} g)</div>
               </>
             ) : <p className="small muted">Registra i pasti per vedere l’andamento settimanale.</p>}

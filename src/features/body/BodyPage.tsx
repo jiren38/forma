@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Scale, Ruler, Camera, Trash2, Pencil, Lock, Columns2, ImageOff } from 'lucide-react';
 import { useMeasurements, usePhotos, useProfile, useSettings, patchProfile } from '@/app/data';
 import { useAuth } from '@/app/auth';
@@ -22,8 +23,10 @@ export default function BodyPage() {
   const profile = useProfile()!;
   const units = useSettings().units;
   const ms = useMeasurements().slice().sort((a, b) => a.date.localeCompare(b.date));
-  const [tab, setTab] = useState<'measures' | 'charts' | 'photos'>('measures');
-  const [edit, setEdit] = useState<Measurement | null>(null);
+  const [sp, setSp] = useSearchParams();
+  const [tab, setTab] = useState<'measures' | 'charts' | 'photos'>(() => (sp.get('tab') === 'photos' ? 'photos' : sp.get('tab') === 'charts' ? 'charts' : 'measures'));
+  const [edit, setEdit] = useState<Measurement | null>(() => (sp.get('new') === '1' ? { id: uid('m_'), date: dayKey() } as Measurement : null));
+  useEffect(() => { if (sp.get('new')) setSp({}, { replace: true }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [del, setDel] = useState<Measurement | null>(null);
   const [metric, setMetric] = useState<Metric>('weightKg');
   const latest = (k: Metric) => [...ms].reverse().find((m) => m[k] != null);

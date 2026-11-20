@@ -1,16 +1,16 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { HashRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, Library, Apple, User } from 'lucide-react';
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import { ToastProvider, Loading } from '@/components/ui';
 import { useProfile, useSettings } from './data';
 import { Background } from './background';
-import { BrandMark } from '@/components/brand';
+import { BottomNav, SideNav } from './Navigation';
 
 import AuthPage from '@/features/auth/AuthPage';
 import Onboarding from '@/features/onboarding/Onboarding';
 import HomePage from '@/features/home/HomePage';
 
+const ExplorePage = lazy(() => import('@/features/explore/ExplorePage'));
 const WorkoutsPage = lazy(() => import('@/features/workouts/WorkoutsPage'));
 const TemplateEditor = lazy(() => import('@/features/workouts/TemplateEditor'));
 const ProgramEditor = lazy(() => import('@/features/workouts/ProgramEditor'));
@@ -44,14 +44,6 @@ const EquipmentPage = lazy(() => import('@/features/profile/EquipmentPage'));
 const SettingsPage = lazy(() => import('@/features/profile/SettingsPage'));
 const PrivacyPage = lazy(() => import('@/features/profile/PrivacyPage'));
 
-const NAV = [
-  { to: '/', label: 'Home', icon: Home, end: true },
-  { to: '/workouts', label: 'Allenamenti', icon: Dumbbell },
-  { to: '/exercises', label: 'Esercizi', icon: Library },
-  { to: '/nutrition', label: 'Nutrizione', icon: Apple },
-  { to: '/profile', label: 'Profilo', icon: User },
-];
-
 function ThemeSync() {
   const s = useSettings();
   useEffect(() => {
@@ -69,20 +61,12 @@ function Shell() {
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
   return (
     <div className="app-shell">
-      {!immersive && (
-        <nav className="side-nav" aria-label="Navigazione principale">
-          <div className="brand"><BrandMark /> Forma</div>
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `side-item ${isActive ? 'active' : ''}`}>
-              <n.icon size={20} /> {n.label}
-            </NavLink>
-          ))}
-        </nav>
-      )}
-      <main className={immersive ? '' : 'main'} style={immersive ? { flex: 1 } : undefined}>
+      {!immersive && <SideNav />}
+      <main className={immersive ? '' : 'main'} style={immersive ? { flex: 1, minWidth: 0 } : undefined}>
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/explore" element={<ExplorePage />} />
             <Route path="/workouts" element={<WorkoutsPage />} />
             <Route path="/workouts/generate" element={<GeneratePage />} />
             <Route path="/workouts/template/:id" element={<TemplateEditor />} />
@@ -119,15 +103,7 @@ function Shell() {
           </Routes>
         </Suspense>
       </main>
-      {!immersive && (
-        <nav className="bottom-nav" aria-label="Navigazione principale">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <n.icon size={22} /> <span>{n.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-      )}
+      {!immersive && <BottomNav />}
       <Background />
     </div>
   );
