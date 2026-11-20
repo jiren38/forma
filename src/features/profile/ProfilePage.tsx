@@ -65,7 +65,7 @@ export default function ProfilePage() {
         ))}
       </div>
       <button className="btn block" onClick={() => signOut()}><LogOut size={17} /> {cloud ? 'Esci dall’account' : 'Esci (i dati restano su questo dispositivo)'}</button>
-      <p className="tiny muted center">Forma · versione 1.0</p>
+      <p className="tiny muted center">Forma · versione 1.0 · build {__BUILD_ID__.slice(0, 16).replace('T', ' ')}</p>
     </div>
   );
 }
