@@ -1,3 +1,4 @@
+import { estimateMinutes, templateParts } from '@/features/workouts/WorkoutsPage';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Play, Bell, ChevronRight, Flame, Scale, Droplets, Moon, Sparkles, Bike, Plus, TrendingDown, TrendingUp, Minus, Coffee, Trophy, Timer, Dumbbell, Activity, BatteryMedium } from 'lucide-react';
@@ -124,9 +125,9 @@ export default function HomePage() {
             ) : todayT ? (
               <>
                 <h2 style={{ fontSize: 26 }}>{todayT.name}</h2>
-                <p className="text-2" style={{ marginTop: 4 }}>{todayT.exercises.length} esercizi · ~{Math.round(todayT.exercises.reduce((a, e) => a + e.sets * (e.restSec + 40), 0) / 60)} min</p>
+                <p className="text-2" style={{ marginTop: 4 }}>{templateParts(todayT)} · ~{estimateMinutes(todayT)} min</p>
                 <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>
-                  {todayT.exercises.slice(0, 4).map((e) => <span key={e.uid} className="pill">{getExercise(e.exerciseId)?.name ?? e.exerciseId}</span>)}
+                  {todayT.exercises.slice(0, 4).map((e) => <span key={e.uid} className={`pill ${e.cardio ? 'blue' : ''}`}>{getExercise(e.exerciseId)?.name ?? e.exerciseId}{e.cardio ? ` · ${Math.round(e.cardio.durationMin)} min` : ''}</span>)}
                   {todayT.exercises.length > 4 && <span className="pill">+{todayT.exercises.length - 4}</span>}
                 </div>
                 <div className="row" style={{ marginTop: 16 }}>

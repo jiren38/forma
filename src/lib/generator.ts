@@ -3,12 +3,53 @@
  * Considera: obiettivo, livello, giorni, durata, attrezzatura, focus muscolari, infortuni, preferenze, storico.
  */
 import { EXERCISES, isAvailable, type Exercise, type Movement } from '@/data/exercises';
-import type { Equipment, Goal, MuscleGroup, Program, Profile, TemplateExercise, WorkoutSession, WorkoutTemplate } from './types';
-import { FULL_GYM, GOAL_INFO } from './labels';
+import type { CardioMachine, Equipment, Goal, MuscleGroup, Program, Profile, TemplateExercise, WorkoutSession, WorkoutTemplate } from './types';
+import { EQUIPMENT_LABEL, FULL_GYM, GOAL_INFO } from './labels';
 import { uid } from './util';
 import { exerciseHistory } from './stats';
+import {
+  CARDIO_EQUIPMENT, KIND_NAME, MACHINE_INFO, buildCardio, cardioLimits, isCardioExercise, machineLabel, machineOf, planMinutes,
+  templateCardio, templateMinutesExact, type CardioKind,
+} from './cardio';
 
-export type SplitKind = 'full_body' | 'upper_lower' | 'ppl' | 'bro_split' | 'ppl_ul' | 'home' | 'conditioning';
+export type SplitKind = 'full_body' | 'upper_lower' | 'ppl' | 'bro_split' | 'ppl_ul' | 'home' | 'conditioning' | 'cardio';
+
+// ---------------------------------------------------------------------------
+// Analisi dell'attrezzatura: è un vincolo, non un suggerimento.
+
+export type TrainingMode = 'cardio_only' | 'mixed' | 'strength_only' | 'bodyweight';
+export const MODE_LABEL: Record<TrainingMode, string> = {
+  cardio_only: 'Solo cardio', mixed: 'Muscolare + cardio', strength_only: 'Solo muscolare', bodyweight: 'Corpo libero',
+};
+
+export interface EquipmentAnalysis {
+  /** attrezzi selezionati (senza il corpo libero implicito) */
+  selected: Equipment[];
+  cardioEquipment: Equipment[];
+  strengthEquipment: Equipment[];
+  /** macchine cardio utilizzabili, comprese le attività all'aperto se l'utente si allena anche fuori */
+  cardioMachines: CardioMachine[];
+  outdoor: boolean;
+  mode: TrainingMode;
+}
+
+export function analyzeEquipment(p: Profile): EquipmentAnalysis {
+  const sel = new Set<Equipment>(p.equipment ?? []);
+  if (p.fullGym || p.location?.includes('commercial_gym')) FULL_GYM.forEach((e) => sel.add(e));
+  sel.delete('bodyweight');
+  const selected = [...sel];
+  const cardioEquipment = CARDIO_EQUIPMENT.filter((e) => sel.has(e));
+  const strengthEquipment = selected.filter((e) => !CARDIO_EQUIPMENT.includes(e));
+  const outdoor = !!p.location?.includes('outdoor');
+  const machines: CardioMachine[] = (['treadmill', 'bike', 'elliptical', 'rower', 'jump_rope'] as CardioMachine[]).filter((m) => sel.has(MACHINE_INFO[m].equipment!));
+  if (outdoor) { machines.push('outdoor_walk'); if (cardioLimits(p).allowRun && p.level !== 'beginner') machines.push('outdoor_run'); }
+  const hasCardio = cardioEquipment.length > 0;
+  const hasStrength = strengthEquipment.length > 0;
+  const mode: TrainingMode = hasCardio && !hasStrength ? 'cardio_only' : hasCardio ? 'mixed' : hasStrength ? 'strength_only' : 'bodyweight';
+  return { selected, cardioEquipment, strengthEquipment, cardioMachines: machines, outdoor, mode };
+}
+
+const CARDIO_GOALS: Goal[] = ['fat_loss', 'endurance', 'fitness', 'recomp', 'maintenance'];
 
 interface Slot { label?: string; movement?: Movement[]; muscles?: MuscleGroup[]; compound?: boolean; kind?: 'main' | 'acc' | 'core' | 'cond' | 'mob' }
 interface DayPlan { name: string; slots: Slot[] }
@@ -74,22 +115,27 @@ const SPLITS: Record<SplitKind, DayPlan[]> = {
     { name: 'Ricondizionamento A', slots: [S.squat, S.pushH, S.pullH, S.lunge, S.core, S.cond] },
     { name: 'Ricondizionamento B', slots: [S.hinge, S.pushV, S.pullV, S.glute, S.core, S.cond] },
   ],
+  cardio: [],
 };
 
 export const SPLIT_NAMES: Record<SplitKind, string> = {
   full_body: 'Full Body', upper_lower: 'Upper/Lower', ppl: 'Push/Pull/Legs', bro_split: 'Bro Split',
   ppl_ul: 'Ipertrofia 5 giorni (Upper/Lower + PPL)', home: 'Allenamento a casa', conditioning: 'Dimagrimento e ricondizionamento',
+  cardio: 'Programma cardio',
 };
 
 export function chooseSplit(p: Profile): SplitKind {
   const d = p.daysPerWeek;
   const homeOnly = p.location?.length && p.location.every((l) => l === 'home' || l === 'outdoor') && !p.fullGym;
+  // con la sola attrezzatura cardio non esiste uno split muscolare possibile
+  if (analyzeEquipment(p).mode === 'cardio_only') return 'cardio';
   if (p.split === 'full_body') return 'full_body';
   if (p.split === 'upper_lower') return 'upper_lower';
   if (p.split === 'ppl') return 'ppl';
   if (p.split === 'bro_split') return 'bro_split';
   const goals = p.goals ?? [];
-  if (homeOnly && (p.equipment?.length ?? 0) < 6) return 'home';
+  // le macchine cardio non contano come attrezzatura per i pesi
+  if (homeOnly && (p.equipment ?? []).filter((e) => !CARDIO_EQUIPMENT.includes(e)).length < 6) return 'home';
   if ((goals.includes('fat_loss') || goals.includes('fitness') || goals.includes('endurance')) && d <= 3 && !goals.includes('hypertrophy')) return 'conditioning';
   if (d <= 3) return p.level === 'advanced' && d === 3 && goals.includes('hypertrophy') ? 'ppl' : 'full_body';
   if (d === 4) return 'upper_lower';
@@ -173,26 +219,151 @@ export function pickDays(daysPerWeek: number, preferred: number[]): number[] {
   return [...base].sort();
 }
 
-export interface GeneratedProgram { program: Program; templates: WorkoutTemplate[]; warnings: string[]; split: SplitKind }
+export interface GeneratedProgram {
+  program: Program; templates: WorkoutTemplate[]; warnings: string[]; split: SplitKind;
+  /** informazioni sulle scelte fatte (non avvisi) */
+  notes: string[];
+  analysis: EquipmentAnalysis;
+  mode: TrainingMode;
+}
+export interface GenerateOptions { split?: SplitKind; daysPerWeek?: number; minutes?: number; variant?: number }
 
-export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opts: { split?: SplitKind; daysPerWeek?: number; minutes?: number } = {}): GeneratedProgram {
-  const split = opts.split ?? chooseSplit(p);
+const round5 = (n: number) => Math.round(n / 5) * 5;
+const isLowerDay = (name: string) => /lower|legs|gambe/i.test(name);
+const HARD: CardioKind[] = ['intervals', 'hiit'];
+
+/** Quanti giorni della settimana includono cardio: dipende dall'obiettivo, mai automaticamente tutti. */
+export function cardioDaysTarget(goals: Goal[], days: number): number {
+  if (goals.includes('fat_loss') || goals.includes('endurance')) return Math.min(days, Math.max(1, Math.ceil((days * 2) / 3)));
+  if (goals.some((g) => g === 'fitness' || g === 'recomp' || g === 'maintenance' || g === 'mobility')) return Math.max(1, Math.ceil(days / 2));
+  return days >= 4 ? 2 : 1; // massa e forza: poco cardio, leggero, per non interferire con il recupero
+}
+
+/** Minuti di cardio in una seduta mista, ricavati dal tempo totale disponibile. */
+export function cardioMinutesFor(goals: Goal[], minutes: number): number {
+  const share = goals.includes('fat_loss') || goals.includes('endurance') ? 0.35 : goals.some((g) => CARDIO_GOALS.includes(g)) ? 0.25 : 0.2;
+  const cap = goals.includes('endurance') ? 40 : 30;
+  const m = Math.max(10, Math.min(cap, round5(minutes * share)));
+  return Math.max(5, Math.min(m, minutes - 10));
+}
+
+function mixedKinds(goals: Goal[], beginner: boolean): CardioKind[] {
+  if (goals.includes('fat_loss')) return beginner ? ['steady', 'incline', 'intervals'] : ['intervals', 'steady', 'incline'];
+  if (goals.includes('endurance')) return ['intervals', 'endurance', 'steady'];
+  if (goals.includes('hypertrophy') || goals.includes('strength')) return ['incline', 'steady'];
+  return ['steady', 'intervals', 'incline'];
+}
+
+function cardioOnlySequence(goals: Goal[], beginner: boolean): CardioKind[] {
+  if (beginner) return ['steady', 'intervals', 'steady', 'endurance', 'easy', 'steady', 'easy'];
+  if (goals.includes('fat_loss')) return ['intervals', 'incline', 'steady', 'hiit', 'endurance', 'easy', 'steady'];
+  if (goals.includes('endurance')) return ['endurance', 'intervals', 'steady', 'hiit', 'endurance', 'easy', 'intervals'];
+  return ['steady', 'intervals', 'endurance', 'incline', 'steady', 'easy', 'intervals'];
+}
+
+/** Sceglie la macchina: rotazione tra quelle disponibili, la salita solo dove esiste il tapis roulant. */
+function pickMachine(machines: CardioMachine[], kind: CardioKind, k: number): CardioMachine {
+  const indoor = machines.filter((m) => m !== 'outdoor_walk' && m !== 'outdoor_run');
+  const pool = indoor.length ? indoor : machines;
+  if (kind === 'incline' && pool.includes('treadmill')) return 'treadmill';
+  if (HARD.includes(kind)) { const ok = pool.filter((m) => m !== 'jump_rope' || pool.length === 1); return ok[k % ok.length]; }
+  return pool[k % pool.length];
+}
+
+/**
+ * Riduce una scheda finché la durata stimata non supera i minuti disponibili:
+ * prima gli accessori, poi le serie, poi (solo se serve) il cardio.
+ */
+export function fitToBudget(t: WorkoutTemplate, minutes: number): WorkoutTemplate {
+  const ex = t.exercises.map((e) => ({ ...e }));
+  const total = () => templateMinutesExact({ exercises: ex });
+  let guard = 0;
+  while (total() > minutes + 1e-9 && guard++ < 200) {
+    const strength = ex.filter((e) => !e.cardio);
+    if (strength.length > 3) { ex.splice(ex.lastIndexOf(strength[strength.length - 1]), 1); continue; }
+    const most = strength.filter((e) => e.sets > 2).sort((a, b) => b.sets - a.sets)[0];
+    if (most) { most.sets -= 1; continue; }
+    if (strength.length > 2) { ex.splice(ex.lastIndexOf(strength[strength.length - 1]), 1); continue; }
+    const c = ex.find((e) => e.cardio && (e.cardio.mode === 'intervals' ? (e.cardio.repeat ?? 1) > 2 : e.cardio.durationMin > 10));
+    if (c?.cardio) {
+      const pl = c.cardio;
+      c.cardio = pl.mode === 'intervals'
+        ? { ...pl, repeat: (pl.repeat ?? 2) - 1, durationMin: Math.round((planMinutes({ ...pl, repeat: (pl.repeat ?? 2) - 1 })) * 10) / 10 }
+        : { ...pl, durationMin: Math.max(10, pl.durationMin - 5) };
+      if (c.cardio.progression) c.cardio.progression = { ...c.cardio.progression, capMin: Math.min(c.cardio.progression.capMin, minutes) };
+      c.repMin = c.repMax = Math.round(planMinutes(c.cardio));
+      continue;
+    }
+    if (strength.length > 1) { ex.splice(ex.lastIndexOf(strength[strength.length - 1]), 1); continue; }
+    break;
+  }
+  return { ...t, exercises: ex };
+}
+
+export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opts: GenerateOptions = {}): GeneratedProgram {
+  const analysis = analyzeEquipment(p);
   const days = opts.daysPerWeek ?? p.daysPerWeek;
   const minutes = opts.minutes ?? p.minutesPerSession;
+  const goals: Goal[] = p.goals?.length ? p.goals : ['fitness'];
+  // Caso A: sola attrezzatura cardio → programma esclusivamente cardiovascolare (anche se lo split scelto era muscolare)
+  if (analysis.mode === 'cardio_only' || (opts.split === 'cardio' && analysis.cardioMachines.length > 0)) {
+    return generateCardioProgram(p, analysis, { days, minutes, goals, variant: opts.variant ?? 0 });
+  }
+  const split: SplitKind = opts.split && opts.split !== 'cardio' ? opts.split : chooseSplit(p) === 'cardio' ? 'full_body' : chooseSplit(p);
   const eq = availableEquipment(p);
   const history = new Set<string>(sessions.flatMap((s) => s.exercises.map((e) => e.exerciseId)));
   const plans = SPLITS[split];
-  const nEx = exerciseCount(minutes, p.sessionStyle);
   const now = new Date().toISOString();
   const usedWeek = new Map<string, number>();
   const warnings: string[] = [];
-  const goals = p.goals?.length ? p.goals : ['fitness' as Goal];
+  const notes: string[] = [];
+  const lim = cardioLimits(p);
+  const variant = opts.variant ?? 0;
 
   // numero di sessioni distinte: per split a giorni fissi uso la lunghezza del piano
   const distinct = split === 'full_body' ? Math.min(3, days) : split === 'ppl' && days === 6 ? 3 : Math.min(plans.length, days);
+
+  // Caso B: macchine cardio disponibili → il cardio è parte della scheda, distribuito sui giorni in base all'obiettivo.
+  // Caso C: senza macchine cardio il cardio entra solo come attività all'aperto, se l'utente si allena anche fuori.
+  const cardioGoal = goals.some((g) => CARDIO_GOALS.includes(g));
+  const cardioMachines = analysis.mode === 'mixed' ? analysis.cardioMachines
+    : analysis.outdoor && cardioGoal ? analysis.cardioMachines : [];
+  const occurrences = Array(distinct).fill(0);
+  for (let i = 0; i < days; i++) occurrences[i % Math.max(1, distinct)]++;
+  const withCardio = new Set<number>();
+  if (cardioMachines.length && distinct > 0) {
+    const target = cardioDaysTarget(goals, days);
+    const strengthFocus = !goals.some((g) => g === 'fat_loss' || g === 'endurance');
+    const order = Array.from({ length: distinct }, (_, i) => i)
+      .sort((a, b) => (strengthFocus ? Number(isLowerDay(plans[a % plans.length].name)) - Number(isLowerDay(plans[b % plans.length].name)) : 0) || (a % 2) - (b % 2) || a - b);
+    let count = 0;
+    for (const i of order) {
+      if (count >= target) break;
+      if (count + occurrences[i] > target && count > 0) continue;
+      withCardio.add(i); count += occurrences[i];
+    }
+  }
+  const kinds = mixedKinds(goals, lim.beginner);
+  let hardDays = 0, k = variant;
+
   const templates: WorkoutTemplate[] = [];
   for (let i = 0; i < distinct; i++) {
     const plan = plans[i % plans.length];
+    // cardio della seduta (deciso prima: il tempo rimanente va ai pesi)
+    let cardio: TemplateExercise | null = null;
+    if (withCardio.has(i)) {
+      const cmin = cardioMinutesFor(goals, minutes);
+      let kind = kinds[k % kinds.length];
+      if (HARD.includes(kind) && (isLowerDay(plan.name) || hardDays + occurrences[i] > lim.maxHardPerWeek)) kind = 'steady';
+      const machine = pickMachine(cardioMachines, kind, k);
+      const built = buildCardio(machine, kind, cmin, p);
+      if (built.plan.mode === 'intervals') hardDays += occurrences[i];
+      cardio = templateCardio(built.exerciseId, built.plan, 'Dopo la parte muscolare');
+      k++;
+    }
+    const strengthMinutes = minutes - (cardio?.cardio ? planMinutes(cardio.cardio) : 0);
+    // abbondo con gli slot: fitToBudget toglie poi gli accessori in eccesso rispetto al tempo reale stimato
+    const nEx = Math.max(exerciseCount(strengthMinutes, p.sessionStyle), Math.min(9, Math.floor(strengthMinutes / 5.5)));
     let slots = [...plan.slots];
     // focus muscolari: aggiungi uno slot dedicato se c'è spazio
     for (const m of p.focusMuscles ?? []) {
@@ -202,7 +373,9 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
     // meno allenati: rimuovi slot accessori relativi
     slots = slots.filter((s) => !(s.kind === 'acc' && s.muscles?.every((m) => p.lessMuscles?.includes(m))));
     if (goals.includes('mobility')) slots.push(S.mob);
-    if ((goals.includes('fat_loss') || goals.includes('endurance')) && !slots.some((s) => s.kind === 'cond')) slots.push(S.cond);
+    // il condizionamento a corpo libero serve solo se nella seduta non c'è già il cardio
+    if (!cardio && (goals.includes('fat_loss') || goals.includes('endurance')) && !slots.some((s) => s.kind === 'cond')) slots.push(S.cond);
+    if (cardio) slots = slots.filter((s) => s.kind !== 'cond');
     // limita in base al tempo mantenendo i fondamentali
     const mains = slots.filter((s) => s.kind === 'main');
     const others = slots.filter((s) => s.kind !== 'main');
@@ -229,7 +402,9 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
       const last = hist[hist.length - 1];
       exercises.push({ uid: uid('te_'), exerciseId: best.id, ...pr, targetWeight: last?.bestWeight || null, notes: '' });
     }
-    templates.push({ id: uid('tpl_'), name: plan.name, exercises, source: 'generated', createdAt: now, updatedAt: now, notes: '' });
+    if (cardio) exercises.push(cardio);
+    const t: WorkoutTemplate = { id: uid('tpl_'), name: cardio ? `${plan.name} + Cardio` : plan.name, exercises, source: 'generated', createdAt: now, updatedAt: now, notes: '' };
+    templates.push(fitToBudget(t, minutes));
   }
 
   // calendario settimanale
@@ -243,23 +418,102 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
     const risky = templates.flatMap((t) => t.exercises).map((te) => EXERCISES.find((e) => e.id === te.exerciseId)!).filter((e) => e && e.stress.some((z) => p.injuries.includes(z)));
     if (risky.length) warnings.push(`Esercizi da valutare con prudenza: ${Array.from(new Set(risky.map((e) => e.name))).join(', ')}.`);
   }
-  if (eq.size <= 2) warnings.push('Con poca attrezzatura il programma usa soprattutto esercizi a corpo libero: aggiungendo elastici o manubri potrai progredire più facilmente.');
+  if (analysis.mode === 'bodyweight') warnings.push('Con poca attrezzatura il programma usa soprattutto esercizi a corpo libero: aggiungendo elastici o manubri potrai progredire più facilmente.');
+  const cardioDays = dayIdx.filter((_, i) => templates[i % templates.length]?.exercises.some((e) => e.cardio)).length;
+  if (cardioDays) {
+    const used = Array.from(new Set(templates.flatMap((t) => t.exercises.filter((e) => e.cardio).map((e) => machineLabel(e.cardio!.machine)))));
+    notes.push(`Cardio inserito in ${cardioDays} ${cardioDays === 1 ? 'giorno' : 'giorni'} su ${days} (${used.join(', ')}), alla fine della seduta e senza superare i ${minutes} minuti disponibili.`);
+  } else if (analysis.mode === 'strength_only' && cardioGoal) {
+    notes.push('Non hai selezionato macchine cardio, quindi la scheda non ne prevede. Se ti va, nei giorni di riposo puoi aggiungere camminate a passo svelto: indica “all’aperto” tra i luoghi di allenamento per inserirle nel programma.');
+  }
 
   const program: Program = {
     id: uid('prg_'),
-    name: `${SPLIT_NAMES[split]} · ${days} giorni`,
+    name: `${SPLIT_NAMES[split]}${cardioDays ? ' + cardio' : ''} · ${days} giorni`,
     description: `Generato il ${new Date().toLocaleDateString('it-IT')} per: ${goals.map((g) => GOAL_INFO[g].label.toLowerCase()).join(', ')}. Sessioni da circa ${minutes} minuti.`,
     schedule, active: true, source: 'generated', createdAt: now,
-    meta: { split, goal: goals[0], level: p.level },
+    meta: { split, goal: goals[0], level: p.level, mode: cardioDays ? 'mixed' : analysis.mode },
   };
   templates.forEach((t) => { t.programId = program.id; });
-  return { program, templates, warnings, split };
+  return { program, templates, warnings, notes, split, analysis, mode: cardioDays ? 'mixed' : analysis.mode };
+}
+
+/** Programma esclusivamente cardiovascolare (Caso A), costruito su obiettivo, livello, giorni e tempo. */
+function generateCardioProgram(p: Profile, analysis: EquipmentAnalysis, o: { days: number; minutes: number; goals: Goal[]; variant: number }): GeneratedProgram {
+  const { days, minutes, goals, variant } = o;
+  const lim = cardioLimits(p);
+  const machines = analysis.cardioMachines;
+  const now = new Date().toISOString();
+  const warnings: string[] = [];
+  const notes: string[] = [];
+  // tipologie per giorno, con al massimo N sedute intense a settimana e mai due di fila
+  const base = cardioOnlySequence(goals, lim.beginner);
+  const seq: CardioKind[] = [];
+  let hard = 0;
+  for (let i = 0; i < days; i++) {
+    let kind = base[(i + (variant % 2)) % base.length];
+    if (HARD.includes(kind) && (hard >= lim.maxHardPerWeek || HARD.includes(seq[i - 1]))) kind = 'steady';
+    if (HARD.includes(kind)) hard++;
+    seq.push(kind);
+  }
+  const templates: WorkoutTemplate[] = [];
+  const byKey = new Map<string, WorkoutTemplate>();
+  const dayTemplates: WorkoutTemplate[] = [];
+  seq.forEach((kind, i) => {
+    const machine = pickMachine(machines, kind, i + variant);
+    // principianti: si parte da sedute brevi e si cresce di qualche minuto alla volta fino al tempo disponibile
+    const start = lim.beginner ? Math.min(minutes, kind === 'endurance' ? 25 : 20) : minutes;
+    const parts: { machine: CardioMachine; minutes: number }[] = [];
+    const second = machines.find((m) => m !== machine && m !== 'jump_rope' && m !== 'outdoor_run');
+    if (!lim.beginner && second && start >= 40 && !HARD.includes(kind)) {
+      const a = round5(start * 0.6);
+      parts.push({ machine, minutes: a }, { machine: second, minutes: start - a });
+    } else parts.push({ machine, minutes: start });
+    const key = `${kind}|${parts.map((x) => `${x.machine}:${x.minutes}`).join(',')}`;
+    let t = byKey.get(key);
+    if (!t) {
+      const exercises = parts.map((x) => {
+        const b = buildCardio(x.machine, kind, x.minutes, p);
+        if (lim.beginner && b.plan.mode === 'steady' && b.plan.durationMin < minutes) b.plan.progression = { stepMin: kind === 'endurance' ? 3 : 2, capMin: minutes };
+        return templateCardio(b.exerciseId, b.plan);
+      });
+      t = fitToBudget({ id: uid('tpl_'), name: `${KIND_NAME[kind]} · ${parts.map((x) => machineLabel(x.machine)).join(' + ')}`, exercises, source: 'generated', createdAt: now, updatedAt: now, notes: '' }, minutes);
+      byKey.set(key, t);
+      templates.push(t);
+    }
+    dayTemplates.push(t);
+  });
+
+  const dayIdx = pickDays(days, p.preferredDays ?? []);
+  const schedule: (string | null)[] = Array(7).fill(null);
+  dayIdx.forEach((d, i) => { schedule[d] = dayTemplates[i]?.id ?? null; });
+
+  const eqNames = analysis.cardioEquipment.map((e) => EQUIPMENT_LABEL[e].toLowerCase()).join(', ');
+  notes.push(`Hai indicato solo attrezzatura cardio (${eqNames}): il programma è esclusivamente cardiovascolare, senza esercizi a corpo libero o con i pesi.`);
+  if (goals.includes('hypertrophy') || goals.includes('strength')) warnings.push('Per aumentare massa o forza servono esercizi con sovraccarico: aggiungendo anche solo manubri o elastici all’attrezzatura, il programma includerà la parte muscolare.');
+  if (lim.beginner) notes.push(`Programma progressivo per principianti: si parte da sedute brevi a intensità moderata e la durata cresce automaticamente quando completi le sessioni come previsto, fino a ${minutes} minuti.`);
+  if (lim.lowerLimb) notes.push('Per le limitazioni indicate a ginocchio, anca o caviglia abbiamo evitato la corsa: le fasi intense sono camminate veloci o in salita.');
+  if (p.injuries?.length) warnings.push('Hai indicato fastidi o limitazioni: abbiamo limitato l’intensità. In caso di dolore, vertigini o affanno eccessivo interrompi e rivolgiti a un medico.');
+
+  const program: Program = {
+    id: uid('prg_'), name: `${SPLIT_NAMES.cardio} · ${days} giorni`,
+    description: `Generato il ${new Date().toLocaleDateString('it-IT')} per: ${goals.map((g) => GOAL_INFO[g].label.toLowerCase()).join(', ')}. Sedute fino a ${minutes} minuti con ${machines.map(machineLabel).join(', ').toLowerCase()}.`,
+    schedule, active: true, source: 'generated', createdAt: now, meta: { split: 'cardio', goal: goals[0], level: p.level, mode: 'cardio_only' },
+  };
+  templates.forEach((t) => { t.programId = program.id; });
+  return { program, templates, warnings, notes, split: 'cardio', analysis, mode: 'cardio_only' };
 }
 
 /** Sostituti per un esercizio della scheda, filtrati per attrezzatura e infortuni. */
 export function substitutes(exerciseId: string, p: Profile): Exercise[] {
   const ex = EXERCISES.find((e) => e.id === exerciseId);
   if (!ex) return [];
+  const an = analyzeEquipment(p);
+  if (isCardioExercise(ex) || an.mode === 'cardio_only') {
+    // cardio: solo attività con le macchine disponibili (cambiare macchina)
+    return EXERCISES.filter((e) => e.id !== ex.id && isCardioExercise(e) && an.cardioMachines.includes(machineOf(e.id)))
+      .sort((a, b) => Number(machineOf(b.id) === machineOf(ex.id)) - Number(machineOf(a.id) === machineOf(ex.id)));
+  }
   const eq = availableEquipment(p);
   return EXERCISES.filter((e) => e.id !== ex.id && e.kind !== 'mobility' && isAvailable(e, eq) && e.primary[0] === ex.primary[0])
     .map((e) => ({ e, s: (e.movement === ex.movement ? 3 : 0) + (e.family === ex.family ? 1 : 0) - e.stress.filter((z) => p.injuries?.includes(z)).length * 4 }))

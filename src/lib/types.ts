@@ -54,7 +54,70 @@ export interface Profile {
   diet: { pattern: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian'; allergies: string; mealsPerDay: number };
   onboardedAt?: string;
   equipmentSetAt?: string;
+  /** Caratteristiche delle macchine cardio dell'utente (es. livelli di resistenza della cyclette). */
+  cardioMachines?: Partial<Record<CardioMachine, MachineSpec>>;
 }
+
+// ---- Cardio integrato nelle schede ----
+export type CardioMachine = 'treadmill' | 'bike' | 'elliptical' | 'rower' | 'jump_rope' | 'outdoor_walk' | 'outdoor_run' | 'other';
+export type CardioIntensity = 'light' | 'moderate' | 'vigorous' | 'high';
+export type CardioPhaseKind = 'warmup' | 'work' | 'recovery' | 'cooldown';
+export interface MachineSpec { maxResistance?: number; maxIncline?: number; maxSpeed?: number }
+
+export interface CardioPhase {
+  uid: string;
+  kind: CardioPhaseKind;
+  label?: string;
+  durationSec: number;
+  speedKmh?: number | null;
+  inclinePct?: number | null;
+  resistance?: number | null;
+  rpm?: number | null;
+  intensity: CardioIntensity;
+}
+
+export interface CardioPlan {
+  machine: CardioMachine;
+  /** continuo oppure a intervalli (riscaldamento + ciclo ripetuto + defaticamento) */
+  mode: 'steady' | 'intervals';
+  title?: string;
+  /** durata totale prevista in minuti (per gli intervalli è calcolata dalle fasi) */
+  durationMin: number;
+  speedKmh?: number | null;
+  inclinePct?: number | null;
+  resistance?: number | null;
+  /** livello massimo della macchina dell'utente (le cyclette non sono tutte uguali) */
+  resistanceMax?: number | null;
+  rpm?: number | null;
+  intensity: CardioIntensity;
+  hrMin?: number | null;
+  hrMax?: number | null;
+  warmup?: CardioPhase | null;
+  cycle?: CardioPhase[];
+  repeat?: number;
+  cooldown?: CardioPhase | null;
+  /** progressione automatica: +stepMin quando la sessione viene completata come previsto, fino a capMin */
+  progression?: { stepMin: number; capMin: number } | null;
+}
+
+export interface CardioActual {
+  durationSec: number;
+  distanceKm?: number | null;
+  speedKmh?: number | null;
+  inclinePct?: number | null;
+  resistance?: number | null;
+  rpm?: number | null;
+  avgHr?: number | null;
+  /** stima, non misura */
+  kcal?: number | null;
+  intensity?: CardioIntensity;
+  notes?: string;
+  completedAt: string;
+}
+
+export interface CardioTimer { running: boolean; startedAt: number | null; accumulatedMs: number }
+
+export interface CardioLogState { plan: CardioPlan; timer: CardioTimer; actual?: CardioActual | null; done: boolean }
 
 export interface Settings {
   units: Units;
@@ -84,6 +147,8 @@ export interface TemplateExercise {
   targetWeight?: number | null;
   notes?: string;
   supersetWith?: string | null;
+  /** Presente solo per le attività cardio: parametri previsti (durata, velocità, pendenza, resistenza…). */
+  cardio?: CardioPlan | null;
 }
 
 export interface WorkoutTemplate {
@@ -106,7 +171,7 @@ export interface Program {
   active: boolean;
   source: 'manual' | 'generated';
   createdAt: string;
-  meta?: { split?: string; goal?: Goal; level?: Level };
+  meta?: { split?: string; goal?: Goal; level?: Level; mode?: string };
 }
 
 export interface SetLog {
@@ -128,6 +193,8 @@ export interface ExerciseLog {
   repMax: number;
   notes?: string;
   sets: SetLog[];
+  /** Attività cardio: piano, timer e risultati effettivi (le serie restano vuote). */
+  cardio?: CardioLogState | null;
 }
 
 export interface WorkoutSession {

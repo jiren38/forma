@@ -10,9 +10,26 @@ import { formatShortDate, uid, formatDuration, fmtN, weekdayIdx } from '@/lib/ut
 import { activeSession, startSession } from './session';
 import { store } from '@/db/store';
 import type { Program, WorkoutTemplate } from '@/lib/types';
+import { cardioMinutesOf, templateMinutesExact } from '@/lib/cardio';
+import { sessionCardioStats } from '@/lib/cardio';
 
-export function estimateMinutes(t: WorkoutTemplate) {
-  return Math.max(5, Math.round(t.exercises.reduce((a, e) => a + e.sets * (e.restSec + 40), 0) / 60));
+/** Durata stimata della scheda: pesi (serie × recupero) + durata prevista del cardio. */
+export function estimateMinutes(t: Pick<WorkoutTemplate, 'exercises'>) {
+  return Math.max(5, Math.round(templateMinutesExact(t)));
+}
+
+/** "4 esercizi + 15 min cardio" */
+export function templateParts(t: Pick<WorkoutTemplate, 'exercises'>) {
+  const c = t.exercises.filter((e) => e.cardio).length;
+  const n = t.exercises.length - c;
+  const parts = [];
+  if (n) parts.push(`${n} esercizi`);
+  if (c) parts.push(`${Math.round(cardioMinutesOf(t))} min cardio`);
+  return parts.join(' + ') || 'vuota';
+}
+function cardioText(s: Parameters<typeof sessionCardioStats>[0]) {
+  const c = sessionCardioStats(s);
+  return c.activities ? ` · ${Math.round(c.minutes)} min cardio` : '';
 }
 
 export default function WorkoutsPage() {
@@ -104,7 +121,7 @@ export default function WorkoutsPage() {
                         <span className={`pill ${i === todayIdx ? 'accent' : ''}`} style={{ width: 46, justifyContent: 'center' }}>{DAY_SHORT[i]}</span>
                         {t ? (
                           <>
-                            <Link to={`/workouts/template/${t.id}`} className="grow ellipsis" style={{ fontWeight: 600 }}>{t.name}<span className="tiny muted"> · {t.exercises.length} esercizi</span></Link>
+                            <Link to={`/workouts/template/${t.id}`} className="grow ellipsis" style={{ fontWeight: 600 }}>{t.name}<span className="tiny muted"> · {templateParts(t)}</span></Link>
                             <button className="btn sm soft" onClick={() => start(t)} aria-label={`Inizia ${t.name}`}><Play size={14} /> Inizia</button>
                           </>
                         ) : <span className="muted small grow">Riposo</span>}
@@ -130,7 +147,7 @@ export default function WorkoutsPage() {
                     <Link to={`/workouts/template/${t.id}`} className="grow" style={{ minWidth: 0 }}>
                       <div className="row" style={{ gap: 6 }}><b className="ellipsis">{t.name}</b>{t.source === 'generated' && <span className="pill accent"><Sparkles size={11} /> Generata</span>}</div>
                       <div className="tiny muted ellipsis" style={{ marginTop: 2 }}>
-                        {t.exercises.length ? `${t.exercises.length} esercizi · ~${estimateMinutes(t)} min · ${t.exercises.slice(0, 3).map((e) => getExercise(e.exerciseId)?.name).filter(Boolean).join(', ')}` : 'Vuota: aggiungi esercizi'}
+                        {t.exercises.length ? `${templateParts(t)} · ~${estimateMinutes(t)} min · ${t.exercises.slice(0, 3).map((e) => getExercise(e.exerciseId)?.name).filter(Boolean).join(', ')}` : 'Vuota: aggiungi esercizi'}
                       </div>
                     </Link>
                     <button className="icon-btn soft" onClick={() => start(t)} aria-label={`Inizia ${t.name}`} disabled={!t.exercises.length}><Play size={18} /></button>
@@ -175,7 +192,7 @@ export default function WorkoutsPage() {
                       <span className="li-icon"><Dumbbell size={18} /></span>
                       <span className="grow" style={{ minWidth: 0 }}>
                         <div className="li-title ellipsis">{s.name}</div>
-                        <div className="li-sub">{formatShortDate(s.startedAt)} · {formatDuration(st.durationMs)} · {st.sets} serie · {fmtN(st.volume)} kg</div>
+                        <div className="li-sub">{formatShortDate(s.startedAt)} · {formatDuration(st.durationMs)}{st.sets ? ` · ${st.sets} serie · ${fmtN(st.volume)} kg` : ''}{cardioText(s)}</div>
                       </span>
                       {!!s.prs?.length && <span className="pr-badge">{s.prs.length} PR</span>}
                       <ChevronRight size={18} className="muted" />

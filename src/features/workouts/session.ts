@@ -1,6 +1,7 @@
 /** Gestione della sessione di allenamento: avvio, salvataggio continuo, ripresa e chiusura. */
 import { store } from '@/db/store';
-import type { ExerciseLog, SetLog, WorkoutSession, WorkoutTemplate } from '@/lib/types';
+import type { CardioPlan, ExerciseLog, Profile, SetLog, WorkoutSession, WorkoutTemplate } from '@/lib/types';
+import { actualFromPlan, defaultPlanFor, isCardioId, logStateFor, pauseTimer, planFromLegacy, progressTemplateCardio, timerElapsedMs } from '@/lib/cardio';
 import { detectPRs, lastPerformance } from '@/lib/stats';
 import { uid } from '@/lib/util';
 import { getExercise } from '@/data/exercises';
@@ -32,7 +33,15 @@ export function makeSets(n: number, prev: ExerciseLog | null, targetWeight?: num
   });
 }
 
-export function exerciseLogFor(exerciseId: string, sessions: WorkoutSession[], opts: { sets?: number; repMin?: number; repMax?: number; restSec?: number; targetWeight?: number | null; notes?: string } = {}): ExerciseLog {
+const PLAN_FALLBACK = { level: 'beginner', injuries: [], age: 0 } as unknown as Profile;
+const currentProfile = (): Profile => store.get<Profile>('profile', 'me') ?? PLAN_FALLBACK;
+
+export function exerciseLogFor(exerciseId: string, sessions: WorkoutSession[], opts: { sets?: number; repMin?: number; repMax?: number; restSec?: number; targetWeight?: number | null; notes?: string; cardio?: CardioPlan | null } = {}): ExerciseLog {
+  // attività cardio: niente serie, ma piano + timer + valori effettivi
+  if (opts.cardio || isCardioId(exerciseId)) {
+    const plan = opts.cardio ?? (opts.repMax ? planFromLegacy({ exerciseId, sets: opts.sets ?? 1, repMin: opts.repMin ?? 20, repMax: opts.repMax }, currentProfile()) : defaultPlanFor(exerciseId, currentProfile()));
+    return { uid: uid('el_'), exerciseId, restSec: 0, repMin: Math.round(plan.durationMin), repMax: Math.round(plan.durationMin), notes: opts.notes ?? '', sets: [], cardio: logStateFor(plan) };
+  }
   const prev = lastPerformance(sessions, exerciseId);
   const e = getExercise(exerciseId);
   const defRest = e?.mechanic === 'isolation' ? 75 : 120;
@@ -64,15 +73,31 @@ export async function saveSession(s: WorkoutSession) {
 export async function finishSession(s: WorkoutSession): Promise<WorkoutSession> {
   const now = new Date();
   const paused = s.pausedAt ? now.getTime() - new Date(s.pausedAt).getTime() : 0;
-  // rimuovi serie vuote non completate
+  const weightKg = currentProfile().weightKg || 0;
+  // rimuovi serie vuote non completate; il cardio avviato ma non chiuso viene registrato con il tempo svolto
   const exercises = s.exercises
-    .map((e) => ({ ...e, sets: e.sets.filter((x) => x.done || x.reps || x.weight) }))
-    .filter((e) => e.sets.some((x) => x.done));
+    .map((e) => {
+      if (!e.cardio) return { ...e, sets: e.sets.filter((x) => x.done || x.reps || x.weight) };
+      if (e.cardio.done) return { ...e, cardio: { ...e.cardio, timer: pauseTimer(e.cardio.timer, now.getTime()) } };
+      const sec = timerElapsedMs(e.cardio.timer, now.getTime()) / 1000;
+      if (sec < 60) return { ...e, cardio: { ...e.cardio, done: false } };
+      return { ...e, cardio: { ...e.cardio, timer: pauseTimer(e.cardio.timer, now.getTime()), done: true, actual: actualFromPlan(e.cardio.plan, sec, weightKg) } };
+    })
+    .filter((e) => (e.cardio ? e.cardio.done && !!e.cardio.actual : e.sets.some((x) => x.done)));
   const ended: WorkoutSession = { ...s, exercises, status: 'completed', endedAt: now.toISOString(), pausedMs: s.pausedMs + paused, pausedAt: null };
   const all = store.list<WorkoutSession>('sessions');
   ended.prs = detectPRs(all, ended);
   await store.put('sessions', ended.id, ended);
   backup(null);
+  // progressione automatica del cardio della scheda (es. programmi per principianti)
+  const tpl = ended.templateId ? store.get<WorkoutTemplate>('templates', ended.templateId) : undefined;
+  if (tpl) {
+    const prog = progressTemplateCardio(tpl, [...all.filter((x) => x.id !== ended.id), ended]);
+    if (prog) {
+      await store.put('templates', tpl.id, { ...prog.template, updatedAt: now.toISOString() });
+      notify({ title: 'Cardio: si sale di livello', body: `Hai completato il cardio come previsto: ${prog.changes.join('; ')}.`, kind: 'coach', link: `/workouts/template/${tpl.id}` }, `cardio_prog_${ended.id}`);
+    }
+  }
   const prNotif = store.get<any>('settings', 'me')?.notifications?.prs !== false;
   for (const pr of prNotif ? ended.prs.slice(0, 3) : []) {
     const ex = getExercise(pr.exerciseId);

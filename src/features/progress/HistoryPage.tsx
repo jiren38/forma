@@ -1,3 +1,4 @@
+import { sessionCardioStats } from '@/lib/cardio';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Dumbbell, History, TrendingUp, Bike } from 'lucide-react';
@@ -45,12 +46,13 @@ export default function HistoryPage() {
             <div className="settings-group">
               {list.map((it) => it.type === 'gym' ? (() => {
                 const st = sessionStats(it.s);
+                const cs = sessionCardioStats(it.s);
                 return (
                   <Link key={it.s.id} to={`/session/${it.s.id}`} className="list-item">
                     <span className="li-icon"><Dumbbell size={18} /></span>
                     <span className="grow" style={{ minWidth: 0 }}>
                       <div className="li-title ellipsis">{it.s.name}</div>
-                      <div className="li-sub">{formatShortDate(it.s.startedAt)} · {formatDuration(st.durationMs)} · {st.exercises} esercizi · {st.sets} serie · {fmtW(st.volume, units)}</div>
+                      <div className="li-sub">{formatShortDate(it.s.startedAt)} · {formatDuration(st.durationMs)}{st.sets ? ` · ${st.exercises} esercizi · ${st.sets} serie · ${fmtW(st.volume, units)}` : ''}{cs.activities ? ` · ${Math.round(cs.minutes)} min cardio` : ''}</div>
                     </span>
                     {!!it.s.prs?.length && <span className="pr-badge">{it.s.prs.length} PR</span>}
                     <ChevronRight size={18} className="muted" />

@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { RefreshCw, Check, AlertTriangle, Settings2 } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Settings2, Info, Bike, Dumbbell } from 'lucide-react';
 import { useProfile, useSessions, saveTemplate, saveProgram, activateProgram } from '@/app/data';
 import { PageHeader, Stepper, useToast } from '@/components/ui';
-import { generateProgram, chooseSplit, SPLIT_NAMES, type SplitKind } from '@/lib/generator';
-import { DAY_SHORT, GOAL_INFO, LEVEL_INFO } from '@/lib/labels';
+import { generateProgram, chooseSplit, analyzeEquipment, SPLIT_NAMES, MODE_LABEL, type SplitKind } from '@/lib/generator';
+import { DAY_SHORT, EQUIPMENT_LABEL, GOAL_INFO, LEVEL_INFO } from '@/lib/labels';
+import { machineLabel } from '@/lib/cardio';
+import { CardioPlanLines } from './cardio-ui';
 import { getExercise } from '@/data/exercises';
 import { formatClock } from '@/lib/util';
 import { estimateMinutes } from './WorkoutsPage';
@@ -22,14 +24,16 @@ export default function GeneratePage() {
   const [seed, setSeed] = useState(0);
   const [busy, setBusy] = useState(false);
   const auto = chooseSplit({ ...profile, daysPerWeek: days });
+  const analysis = analyzeEquipment(profile);
+  const cardioOnly = analysis.mode === 'cardio_only';
 
   const g = useMemo(() => {
-    const res = generateProgram({ ...profile, daysPerWeek: days, minutesPerSession: minutes }, sessions, { split: split === 'auto' ? undefined : split, daysPerWeek: days, minutes });
-    if (seed > 0) {
+    const res = generateProgram({ ...profile, daysPerWeek: days, minutesPerSession: minutes }, sessions, { split: split === 'auto' ? undefined : split, daysPerWeek: days, minutes, variant: seed });
+    if (seed > 0 && res.mode !== 'cardio_only') {
       // variante: penalizza leggermente le scelte precedenti rigenerando con preferenza invertita
       const avoid = new Set(res.templates.flatMap((t) => t.exercises.filter((_, i) => (i + seed) % 2 === 0).map((e) => e.exerciseId)));
       const p2 = { ...profile, daysPerWeek: days, minutesPerSession: minutes, exercisePrefs: { ...profile.exercisePrefs, avoidIds: [...(profile.exercisePrefs?.avoidIds ?? []), ...avoid] } };
-      const alt = generateProgram(p2, sessions, { split: split === 'auto' ? undefined : split, daysPerWeek: days, minutes });
+      const alt = generateProgram(p2, sessions, { split: split === 'auto' ? undefined : split, daysPerWeek: days, minutes, variant: seed });
       if (alt.templates.every((t) => t.exercises.length >= 2)) return alt;
     }
     return res;
@@ -65,16 +69,29 @@ export default function GeneratePage() {
           <div className="field"><label>Giorni a settimana</label><Stepper value={days} min={1} max={7} onChange={setDays} /></div>
           <div className="field"><label>Minuti per sessione</label><Stepper value={minutes} min={15} max={150} step={15} onChange={setMinutes} /></div>
         </div>
-        <div className="field">
-          <label>Suddivisione</label>
-          <select className="select" value={split} onChange={(e) => setSplit(e.target.value as SplitKind | 'auto')}>
-            <option value="auto">Automatica (consigliata: {SPLIT_NAMES[auto]})</option>
-            {SPLIT_OPTIONS.map((s) => <option key={s} value={s}>{SPLIT_NAMES[s]}</option>)}
-          </select>
-        </div>
+        {cardioOnly ? (
+          <div className="field"><label>Suddivisione</label><div className="small text-2">Programma cardio: con la sola attrezzatura cardio non si possono generare schede muscolari.</div></div>
+        ) : (
+          <div className="field">
+            <label>Suddivisione</label>
+            <select className="select" value={split} onChange={(e) => setSplit(e.target.value as SplitKind | 'auto')}>
+              <option value="auto">Automatica (consigliata: {SPLIT_NAMES[auto]})</option>
+              {SPLIT_OPTIONS.map((s) => <option key={s} value={s}>{SPLIT_NAMES[s]}</option>)}
+              {analysis.cardioMachines.length > 0 && <option value="cardio">Solo cardio</option>}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="card stack-sm" aria-label="Attrezzatura considerata">
+        <div className="row-between"><b>Attrezzatura considerata</b><span className={`pill ${g.mode === 'cardio_only' ? 'blue' : g.mode === 'mixed' ? 'accent' : ''}`}>{MODE_LABEL[g.mode]}</span></div>
+        <div className="small row" style={{ gap: 6, alignItems: 'flex-start' }}><Dumbbell size={15} style={{ flex: 'none', marginTop: 2 }} /><span><b>Muscolare:</b> {analysis.strengthEquipment.length ? (profile.fullGym ? 'palestra completa' : analysis.strengthEquipment.map((e) => EQUIPMENT_LABEL[e].toLowerCase()).join(', ')) : 'nessun attrezzo'}</span></div>
+        <div className="small row" style={{ gap: 6, alignItems: 'flex-start' }}><Bike size={15} style={{ flex: 'none', marginTop: 2 }} /><span><b>Cardio:</b> {analysis.cardioMachines.length ? analysis.cardioMachines.map((m) => machineLabel(m).toLowerCase()).join(', ') : 'nessuna macchina'}</span></div>
+        <p className="hint">L’attrezzatura è un vincolo: il programma usa solo ciò che hai selezionato. <Link to="/profile/equipment" className="accent">Modifica attrezzatura</Link></p>
       </div>
 
       {g.warnings.map((w, i) => <div key={i} className="banner warn"><AlertTriangle size={18} /><span>{w}</span></div>)}
+      {g.notes.map((w, i) => <div key={`n${i}`} className="banner info"><Info size={18} /><span>{w}</span></div>)}
 
       <div className="section-title">Anteprima · {g.program.name}
         <button className="btn sm ghost" onClick={() => setSeed((s) => s + 1)} style={{ textTransform: 'none', letterSpacing: 0 }}><RefreshCw size={15} /> Variante</button>
@@ -85,7 +102,8 @@ export default function GeneratePage() {
             const idx = g.templates.findIndex((t) => t.id === tid);
             return (
               <div key={i} className={`day ${tid ? 'train' : ''}`} style={{ cursor: 'default' }}>
-                <span className="dn">{DAY_SHORT[i]}</span><span className="dd" style={{ fontSize: 14 }}>{tid ? String.fromCharCode(65 + idx) : '–'}</span><span className="dot" />
+                <span className="dn">{DAY_SHORT[i]}</span><span className="dd" style={{ fontSize: 14 }}>{tid ? String.fromCharCode(65 + idx) : '–'}</span>
+                {tid && g.templates[idx]?.exercises.some((e) => e.cardio) ? <Bike size={12} color="var(--blue)" aria-label="con cardio" /> : <span className="dot" />}
               </div>
             );
           })}
@@ -98,17 +116,31 @@ export default function GeneratePage() {
               <h3><span className="pill accent" style={{ marginRight: 8 }}>{String.fromCharCode(65 + i)}</span>{t.name}</h3>
               <span className="tiny muted">~{estimateMinutes(t)} min</span>
             </div>
-            <ol className="stack-sm" style={{ margin: 0, paddingLeft: 18 }}>
-              {t.exercises.map((e) => {
-                const ex = getExercise(e.exerciseId);
-                return (
-                  <li key={e.uid} className="small">
-                    <Link to={`/exercises/${e.exerciseId}`} style={{ fontWeight: 600 }}>{ex?.name}</Link>
-                    <span className="muted"> · {e.sets}×{e.repMin}–{e.repMax}{ex?.tracking === 'time' ? ' s' : ''} · rec. {formatClock(e.restSec)}</span>
-                  </li>
-                );
-              })}
-            </ol>
+            {t.exercises.some((e) => !e.cardio) && <>
+              {t.exercises.some((e) => e.cardio) && <div className="group-label"><Dumbbell size={13} /> Allenamento muscolare</div>}
+              <ol className="stack-sm" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                {t.exercises.filter((e) => !e.cardio).map((e) => {
+                  const ex = getExercise(e.exerciseId);
+                  return (
+                    <li key={e.uid} className="small">
+                      <Link to={`/exercises/${e.exerciseId}`} style={{ fontWeight: 600 }}>{ex?.name}</Link>
+                      <span className="muted"> · {e.sets}×{e.repMin}–{e.repMax}{ex?.tracking === 'time' ? ' s' : ''} · rec. {formatClock(e.restSec)}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>}
+            {t.exercises.some((e) => e.cardio) && <>
+              <div className="group-label cardio" style={{ marginTop: 10 }}><Bike size={13} /> Allenamento cardio</div>
+              <div className="stack-sm" style={{ marginTop: 6 }}>
+                {t.exercises.filter((e) => e.cardio).map((e) => (
+                  <div key={e.uid} className="cardio-box" style={{ padding: 10 }}>
+                    <Link to={`/exercises/${e.exerciseId}`} className="small" style={{ fontWeight: 700 }}>{getExercise(e.exerciseId)?.name}</Link>
+                    <CardioPlanLines plan={e.cardio!} compact />
+                  </div>
+                ))}
+              </div>
+            </>}
           </div>
         ))}
       </div>

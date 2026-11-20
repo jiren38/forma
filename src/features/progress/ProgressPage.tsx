@@ -10,8 +10,9 @@ import { getExercise } from '@/data/exercises';
 import { MUSCLE_LABEL } from '@/lib/labels';
 import { fmtN, fmtW, formatShortDate, toDisplayWeight } from '@/lib/util';
 import type { MuscleGroup } from '@/lib/types';
+import CardioProgress, { useCardioEntries } from './CardioProgress';
 
-type Tab = 'overview' | 'exercises' | 'muscles' | 'records';
+type Tab = 'overview' | 'exercises' | 'muscles' | 'cardio' | 'records';
 
 export default function ProgressPage() {
   const sessions = useSessions();
@@ -20,8 +21,9 @@ export default function ProgressPage() {
   const units = settings.units;
   const [tab, setTab] = useState<Tab>('overview');
   const done = completedSessions(sessions);
+  const cardio = useCardioEntries();
 
-  if (!done.length) return (
+  if (!done.length && !cardio.length) return (
     <div className="page stack"><PageHeader title="Progressi" back />
       <Empty icon={<BarChart3 />} title="Ancora nessun dato" text="Completa il primo allenamento: grafici, record e statistiche si costruiscono automaticamente dai tuoi dati reali." action={<Link to="/workouts" className="btn primary">Inizia ad allenarti</Link>} />
     </div>
@@ -31,11 +33,12 @@ export default function ProgressPage() {
     <div className="page stack">
       <PageHeader title="Progressi" back />
       <div className="tabbar" role="tablist">
-        {([['overview', 'Panoramica'], ['exercises', 'Esercizi'], ['muscles', 'Muscoli'], ['records', 'Record']] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
+        {([['overview', 'Panoramica'], ['exercises', 'Esercizi'], ['muscles', 'Muscoli'], ['cardio', 'Cardio'], ['records', 'Record']] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === 'overview' && <Overview sessions={sessions} units={units} goal={settings.weeklyWorkoutGoal ?? profile?.daysPerWeek ?? 3} />}
       {tab === 'exercises' && <Exercises sessions={sessions} units={units} />}
       {tab === 'muscles' && <Muscles sessions={sessions} />}
+      {tab === 'cardio' && <CardioProgress />}
       {tab === 'records' && <Records sessions={sessions} units={units} />}
     </div>
   );

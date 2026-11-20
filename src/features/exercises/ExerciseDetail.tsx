@@ -1,3 +1,4 @@
+import { defaultPlanFor, isCardioExercise, templateCardio } from '@/lib/cardio';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Heart, Plus, AlertTriangle, Wind, ListChecks, XCircle, Lightbulb, Trophy, Dumbbell, Info, Repeat, Shuffle, Target } from 'lucide-react';
@@ -49,7 +50,9 @@ export default function ExerciseDetail() {
     const t = templates.find((x) => x.id === tplId);
     if (!t) return;
     const p = prescription(profile?.goals ?? ['fitness'], profile?.level ?? 'beginner', e!.mechanic === 'compound', profile?.sessionStyle ?? 'long');
-    await saveTemplate({ ...t, exercises: [...t.exercises, { uid: uid('te_'), exerciseId: e!.id, ...p, targetWeight: null, notes: '' }] });
+    // il cardio entra nella scheda con un piano (durata, velocità, pendenza, resistenza…), non con serie e ripetizioni
+    const te = isCardioExercise(e) && profile ? templateCardio(e!.id, defaultPlanFor(e!.id, profile)) : { uid: uid('te_'), exerciseId: e!.id, ...p, targetWeight: null, notes: '' };
+    await saveTemplate({ ...t, exercises: [...t.exercises, te] });
     setAddOpen(false);
     toast(`Aggiunto a “${t.name}”`);
   }
