@@ -31,6 +31,26 @@ export function ExerciseRow({ e, onClick, right, sub }: { e: Exercise; onClick?:
   );
 }
 
+const LEVEL = ['', 'Base', 'Intermedio', 'Avanzato'];
+
+/** Card della griglia esercizi: anteprima animata, nome, muscolo principale, attrezzatura e livello. */
+export function ExerciseCard({ e, onClick, action }: { e: Exercise; onClick: () => void; action?: React.ReactNode }) {
+  return (
+    <div className="exc" role="button" tabIndex={0} onClick={onClick} onKeyDown={(k) => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); onClick(); } }} aria-label={e.name}>
+      <div className="exc-media">
+        <ExerciseVisual exerciseId={e.id} patternId={e.pattern} muscles={e.primary} className="thumb" label={e.name} />
+        <span className={`exc-lvl l${e.difficulty}`} title={`Livello: ${LEVEL[e.difficulty]}`}><i /><i /><i /><span>{LEVEL[e.difficulty]}</span></span>
+        {action}
+      </div>
+      <div className="exc-body">
+        <b className="exc-name">{e.name}</b>
+        <span className="exc-mus">{e.primary.map((m) => MUSCLE_LABEL[m]).slice(0, 2).join(' · ')}</span>
+        <span className="exc-eq">{equipmentText(e)}</span>
+      </div>
+    </div>
+  );
+}
+
 /** Ricerca testuale su nome italiano, inglese, muscoli e attrezzi. */
 export function searchExercises(list: Exercise[], q: string) {
   const n = normalize(q.trim());

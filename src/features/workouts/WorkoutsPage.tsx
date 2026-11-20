@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Sparkles, Play, Copy, Trash2, CalendarDays, History, TrendingUp, Bike, ChevronRight, MoreVertical, Dumbbell, Pencil, CheckCircle2, Timer } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { SectionHero } from '@/design/SectionHero';
+import { ArtPanel } from '@/design/Art';
+import { Plus, Sparkles, Play, Copy, Trash2, CalendarDays, History, TrendingUp, Bike, ChevronRight, MoreVertical, Dumbbell, Pencil, CheckCircle2, Timer, Library } from 'lucide-react';
 import { useActiveProgram, usePrograms, useSessions, useTemplates, saveTemplate, saveProgram, activateProgram } from '@/app/data';
-import { PageHeader, Empty, Sheet, Confirm, useToast } from '@/components/ui';
-import { DAY_SHORT } from '@/lib/labels';
+import { Empty, Sheet, Confirm, useToast } from '@/components/ui';
+import { DAY_SHORT, MUSCLE_LABEL } from '@/lib/labels';
 import { getExercise } from '@/data/exercises';
 import { completedSessions, sessionStats } from '@/lib/stats';
 import { formatShortDate, uid, formatDuration, fmtN, weekdayIdx } from '@/lib/util';
 import { activeSession, startSession } from './session';
 import { store } from '@/db/store';
-import type { Program, WorkoutTemplate } from '@/lib/types';
+import type { MuscleGroup, Program, WorkoutTemplate } from '@/lib/types';
 import { cardioMinutesOf, templateMinutesExact } from '@/lib/cardio';
 import { sessionCardioStats } from '@/lib/cardio';
 
@@ -27,6 +29,25 @@ export function templateParts(t: Pick<WorkoutTemplate, 'exercises'>) {
   if (c) parts.push(`${Math.round(cardioMinutesOf(t))} min cardio`);
   return parts.join(' + ') || 'vuota';
 }
+/** Muscoli principali della scheda (in ordine di frequenza) e soggetto dell'illustrazione. */
+export function templateFocus(t: WorkoutTemplate) {
+  const count = new Map<MuscleGroup, number>();
+  let lead: { pattern: string; muscles: MuscleGroup[] } | null = null;
+  for (const te of t.exercises) {
+    const e = getExercise(te.exerciseId);
+    if (!e || te.cardio) continue;
+    if (!lead) lead = { pattern: e.pattern, muscles: e.primary };
+    e.primary.forEach((m) => count.set(m, (count.get(m) ?? 0) + 1));
+  }
+  const muscles = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m).filter((m) => m !== 'cardio' && m !== 'full_body');
+  if (!lead) {
+    const c = t.exercises.find((x) => x.cardio);
+    const e = c ? getExercise(c.exerciseId) : undefined;
+    lead = { pattern: e?.pattern ?? 'run', muscles: ['calves', 'quads'] };
+  }
+  return { muscles, lead };
+}
+
 function cardioText(s: Parameters<typeof sessionCardioStats>[0]) {
   const c = sessionCardioStats(s);
   return c.activities ? ` · ${Math.round(c.minutes)} min cardio` : '';
@@ -44,6 +65,14 @@ export default function WorkoutsPage() {
   const [menu, setMenu] = useState<WorkoutTemplate | null>(null);
   const [del, setDel] = useState<WorkoutTemplate | null>(null);
   const [delProg, setDelProg] = useState<Program | null>(null);
+
+  const [sp, setSp] = useSearchParams();
+  const programsRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (sp.get('new') === '1') { setSp({}, { replace: true }); void createTemplate(); }
+    else if (sp.get('focus') === 'programs') programsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function start(t: WorkoutTemplate | null) {
     if (activeSession()) { nav('/workout/live'); return; }
@@ -80,49 +109,58 @@ export default function WorkoutsPage() {
   }
 
   const todayIdx = weekdayIdx(new Date());
+  const todayT = program?.schedule[todayIdx] ? templates.find((t) => t.id === program.schedule[todayIdx]) : undefined;
 
   return (
     <div className="page stack">
-      <PageHeader title="Allenamenti" right={<Link to="/history" className="icon-btn" aria-label="Storico allenamenti"><History size={20} /></Link>} />
+      <SectionHero section="training" title="Allenamento" desc="Le tue schede, il programma della settimana e le sessioni completate."
+        right={<Link to="/history" className="icon-btn" aria-label="Storico allenamenti"><History size={20} /></Link>}
+        actions={<>
+          {active ? <button className="btn primary" onClick={() => nav('/workout/live')}><Timer size={18} /> Riprendi</button>
+            : todayT ? <button className="btn primary" onClick={() => start(todayT)}><Play size={18} fill="currentColor" /> {todayT.name}</button>
+            : <button className="btn primary" onClick={() => start(null)}><Play size={18} fill="currentColor" /> Allenamento libero</button>}
+          <Link to="/workouts/generate" className="btn"><Sparkles size={17} /> Genera</Link>
+        </>} />
 
       {active && (
-        <button className="card clickable row" style={{ width: '100%', textAlign: 'left', borderColor: 'var(--accent)', background: 'var(--accent-soft)' }} onClick={() => nav('/workout/live')}>
-          <Timer size={22} className="accent" />
-          <span className="grow"><b>Allenamento in corso: {active.name}</b><div className="small text-2">Tocca per riprendere</div></span>
+        <button className="live-banner" onClick={() => nav('/workout/live')}>
+          <span className="live-ic"><Timer size={20} /></span>
+          <span className="grow"><b>Allenamento in corso: {active.name}</b><span className="small">Tocca per riprendere</span></span>
           <ChevronRight />
         </button>
       )}
 
-      <div className="grid-2">
-        <button className="card clickable col" style={{ gap: 8, textAlign: 'left' }} onClick={() => start(null)}>
-          <Play size={22} className="accent" /><b>Allenamento libero</b><span className="tiny muted">Parti da zero e aggiungi esercizi mentre ti alleni</span>
+      <div className="mode-grid">
+        <button className="mode-tile" onClick={() => start(null)}>
+          <span className="mode-ic"><Play size={20} /></span><b>Allenamento libero</b><span>Parti da zero e aggiungi esercizi mentre ti alleni</span>
         </button>
-        <Link to="/workouts/generate" className="card clickable col" style={{ gap: 8 }}>
-          <Sparkles size={22} className="accent" /><b>Genera programma</b><span className="tiny muted">Su misura per obiettivi, livello, tempo e attrezzatura</span>
+        <Link to="/workouts/generate" className="mode-tile">
+          <span className="mode-ic"><Sparkles size={20} /></span><b>Schede automatiche</b><span>Su misura per obiettivi, livello, tempo e attrezzatura</span>
         </Link>
+        <button className="mode-tile" onClick={createTemplate}>
+          <span className="mode-ic"><Plus size={20} /></span><b>Crea workout</b><span>Scegli tu gli esercizi dalla libreria</span>
+        </button>
       </div>
 
       <div className="desk-2">
         <div className="stack">
           {/* Programma attivo */}
           <section>
-            <div className="section-title">Programma attivo</div>
+            <div className="section-title">Questa settimana {program && <Link to={`/workouts/program/${program.id}`}><Pencil size={14} /> Modifica</Link>}</div>
             {program ? (
-              <div className="card">
-                <div className="row-between">
-                  <div style={{ minWidth: 0 }}><h3 className="ellipsis">{program.name}</h3>{program.description && <div className="tiny muted" style={{ marginTop: 2 }}>{program.description}</div>}</div>
-                  <Link to={`/workouts/program/${program.id}`} className="btn sm"><Pencil size={15} /> Modifica</Link>
-                </div>
-                <div className="stack-sm" style={{ marginTop: 12 }}>
+              <div className="card plan">
+                <div className="plan-head"><CalendarDays size={18} /><b className="ellipsis grow">{program.name}</b><span className="pill accent">{program.schedule.filter(Boolean).length} giorni</span></div>
+                {program.description && <div className="tiny muted" style={{ margin: '-4px 0 8px' }}>{program.description}</div>}
+                <div className="plan-days">
                   {program.schedule.map((tid, i) => {
                     const t = tid ? templates.find((x) => x.id === tid) : undefined;
                     return (
-                      <div key={i} className="row" style={{ gap: 10, padding: '6px 0', borderBottom: i < 6 ? '1px solid var(--border)' : 0 }}>
-                        <span className={`pill ${i === todayIdx ? 'accent' : ''}`} style={{ width: 46, justifyContent: 'center' }}>{DAY_SHORT[i]}</span>
+                      <div key={i} className={`plan-day ${i === todayIdx ? 'now' : ''} ${t ? '' : 'rest'}`}>
+                        <span className="pd-day">{DAY_SHORT[i]}</span>
                         {t ? (
                           <>
-                            <Link to={`/workouts/template/${t.id}`} className="grow ellipsis" style={{ fontWeight: 600 }}>{t.name}<span className="tiny muted"> · {templateParts(t)}</span></Link>
-                            <button className="btn sm soft" onClick={() => start(t)} aria-label={`Inizia ${t.name}`}><Play size={14} /> Inizia</button>
+                            <Link to={`/workouts/template/${t.id}`} className="grow" style={{ minWidth: 0 }}><div className="ellipsis" style={{ fontWeight: 650 }}>{t.name}</div><div className="tiny muted ellipsis">{templateParts(t)} · ~{estimateMinutes(t)} min</div></Link>
+                            <button className={`btn sm ${i === todayIdx ? 'primary' : 'soft'}`} onClick={() => start(t)} aria-label={`Inizia ${t.name}`}><Play size={14} fill="currentColor" />{i === todayIdx ? ' Inizia' : ''}</button>
                           </>
                         ) : <span className="muted small grow">Riposo</span>}
                       </div>
@@ -141,19 +179,25 @@ export default function WorkoutsPage() {
             {templates.length === 0 ? (
               <div className="card"><Empty icon={<Dumbbell />} title="Nessuna scheda" text="Crea una scheda scegliendo gli esercizi dalla libreria, oppure genera un programma." action={<button className="btn primary sm" onClick={createTemplate}><Plus size={16} /> Crea scheda</button>} /></div>
             ) : (
-              <div className="stack-sm">
-                {templates.map((t) => (
-                  <div key={t.id} className="card row" style={{ padding: 12 }}>
-                    <Link to={`/workouts/template/${t.id}`} className="grow" style={{ minWidth: 0 }}>
-                      <div className="row" style={{ gap: 6 }}><b className="ellipsis">{t.name}</b>{t.source === 'generated' && <span className="pill accent"><Sparkles size={11} /> Generata</span>}</div>
-                      <div className="tiny muted ellipsis" style={{ marginTop: 2 }}>
-                        {t.exercises.length ? `${templateParts(t)} · ~${estimateMinutes(t)} min · ${t.exercises.slice(0, 3).map((e) => getExercise(e.exerciseId)?.name).filter(Boolean).join(', ')}` : 'Vuota: aggiungi esercizi'}
-                      </div>
-                    </Link>
-                    <button className="icon-btn soft" onClick={() => start(t)} aria-label={`Inizia ${t.name}`} disabled={!t.exercises.length}><Play size={18} /></button>
-                    <button className="icon-btn ghost" onClick={() => setMenu(t)} aria-label={`Altre azioni per ${t.name}`}><MoreVertical size={18} /></button>
-                  </div>
-                ))}
+              <div className="tpl-list">
+                {templates.map((t) => {
+                  const f = templateFocus(t);
+                  const hasCardio = t.exercises.some((e) => e.cardio);
+                  return (
+                    <div key={t.id} className="tpl-card">
+                      <Link to={`/workouts/template/${t.id}`} className="tpl-art" aria-hidden tabIndex={-1}>
+                        <ArtPanel spec={{ kind: 'figure', pattern: f.lead.pattern, muscles: f.lead.muscles, phase: 0.5 }} color={hasCardio && !f.muscles.length ? 'var(--c-cardio)' : 'var(--c-training)'} color2="#22300a" />
+                      </Link>
+                      <Link to={`/workouts/template/${t.id}`} className="grow" style={{ minWidth: 0 }}>
+                        <div className="row" style={{ gap: 6 }}><b className="ellipsis">{t.name}</b>{t.source === 'generated' && <span className="pill accent"><Sparkles size={11} /> Auto</span>}</div>
+                        <div className="tiny muted ellipsis" style={{ marginTop: 3 }}>{t.exercises.length ? `${templateParts(t)} · ~${estimateMinutes(t)} min` : 'Vuota: aggiungi esercizi'}</div>
+                        {f.muscles.length > 0 && <div className="tpl-muscles">{f.muscles.slice(0, 3).map((m) => <span key={m}>{MUSCLE_LABEL[m]}</span>)}{hasCardio && <span className="c">Cardio</span>}</div>}
+                      </Link>
+                      <button className="icon-btn soft" onClick={() => start(t)} aria-label={`Inizia ${t.name}`} disabled={!t.exercises.length}><Play size={18} fill="currentColor" /></button>
+                      <button className="icon-btn ghost" onClick={() => setMenu(t)} aria-label={`Altre azioni per ${t.name}`}><MoreVertical size={18} /></button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -161,7 +205,7 @@ export default function WorkoutsPage() {
 
         <div className="stack">
           {/* Programmi */}
-          <section>
+          <section ref={programsRef}>
             <div className="section-title">Programmi settimanali <button className="btn sm soft" onClick={createProgram}><Plus size={15} /> Nuovo</button></div>
             {programs.length === 0 ? <p className="small muted">Nessun programma salvato.</p> : (
               <div className="settings-group">
@@ -182,14 +226,14 @@ export default function WorkoutsPage() {
 
           {/* Ultime sessioni */}
           <section>
-            <div className="section-title">Ultimi allenamenti <Link to="/history" className="small accent" style={{ textTransform: 'none', letterSpacing: 0 }}>Vedi tutti</Link></div>
+            <div className="section-title">Ultimi allenamenti <Link to="/history">Vedi tutti <ChevronRight size={15} /></Link></div>
             {done.length === 0 ? <p className="small muted">Qui compariranno gli allenamenti completati.</p> : (
               <div className="settings-group">
                 {done.slice(0, 5).map((s) => {
                   const st = sessionStats(s);
                   return (
                     <Link key={s.id} to={`/session/${s.id}`} className="list-item">
-                      <span className="li-icon"><Dumbbell size={18} /></span>
+                      <span className="li-icon sec-ic" style={{ ['--sc' as string]: 'var(--c-training)' } as React.CSSProperties}><Dumbbell size={18} /></span>
                       <span className="grow" style={{ minWidth: 0 }}>
                         <div className="li-title ellipsis">{s.name}</div>
                         <div className="li-sub">{formatShortDate(s.startedAt)} · {formatDuration(st.durationMs)}{st.sets ? ` · ${st.sets} serie · ${fmtN(st.volume)} kg` : ''}{cardioText(s)}</div>
@@ -203,10 +247,10 @@ export default function WorkoutsPage() {
             )}
           </section>
 
-          <div className="grid-3">
-            <Link to="/progress" className="card clickable col center" style={{ alignItems: 'center', gap: 6, padding: 12 }}><TrendingUp size={20} /><span className="small" style={{ fontWeight: 600 }}>Progressi</span></Link>
-            <Link to="/history" className="card clickable col center" style={{ alignItems: 'center', gap: 6, padding: 12 }}><History size={20} /><span className="small" style={{ fontWeight: 600 }}>Storico</span></Link>
-            <Link to="/cardio" className="card clickable col center" style={{ alignItems: 'center', gap: 6, padding: 12 }}><Bike size={20} /><span className="small" style={{ fontWeight: 600 }}>Cardio</span></Link>
+          <div className="related">
+            <Link to="/progress" style={{ ['--sc' as string]: 'var(--c-progress)' } as React.CSSProperties}><TrendingUp size={18} /> Progressi</Link>
+            <Link to="/exercises" style={{ ['--sc' as string]: 'var(--c-exercises)' } as React.CSSProperties}><Library size={18} /> Esercizi</Link>
+            <Link to="/cardio" style={{ ['--sc' as string]: 'var(--c-cardio)' } as React.CSSProperties}><Bike size={18} /> Cardio</Link>
           </div>
         </div>
       </div>

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Droplets, Moon, BatteryMedium, Brain, Smile, Activity, ChevronLeft, ChevronRight, Bell, Info, Minus, Plus } from 'lucide-react';
+import { Droplets, Moon, BatteryMedium, Brain, Smile, Activity, ChevronLeft, ChevronRight, Bell, Info, Minus, Plus, StretchHorizontal } from 'lucide-react';
 import { useCardio, useSessions, useSettings, useWellness } from '@/app/data';
 import { store } from '@/db/store';
 import { readiness } from '@/lib/insights';
 import { muscleSets, completedSessions } from '@/lib/stats';
 import { MAIN_MUSCLES, MUSCLE_LABEL } from '@/lib/labels';
 import { addDays, dayKey, fmtN, formatLongDate, fromKey } from '@/lib/util';
+import { SectionHero } from '@/design/SectionHero';
 import { PageHeader, Ring, NumberInput, useToast } from '@/components/ui';
 import { BarChart } from '@/components/charts';
 import type { MuscleGroup, WellnessDay } from '@/lib/types';
@@ -52,10 +53,11 @@ export default function WellnessPage() {
 
   return (
     <div className="page stack">
-      <PageHeader title="Benessere e recupero" back />
-      <div className="row-between card" style={{ padding: 8 }}>
+      <SectionHero section="wellness" compact title="Benessere" desc="Sonno, idratazione, energia e indolenzimento: il recupero fa parte dei progressi."
+        actions={<Link to="/exercises?cat=mobility" className="btn"><StretchHorizontal size={17} /> Mobilità e stretching</Link>} />
+      <div className="date-nav">
         <button className="icon-btn ghost" onClick={() => setDate(dayKey(addDays(fromKey(date), -1)))} aria-label="Giorno precedente"><ChevronLeft size={20} /></button>
-        <b>{isToday ? 'Oggi' : formatLongDate(fromKey(date))}</b>
+        <div className="center"><b>{isToday ? 'Oggi' : formatLongDate(fromKey(date))}</b>{isToday && <div className="tiny muted">{formatLongDate(fromKey(date))}</div>}</div>
         <button className="icon-btn ghost" disabled={isToday} onClick={() => setDate(dayKey(addDays(fromKey(date), 1)))} aria-label="Giorno successivo"><ChevronRight size={20} /></button>
       </div>
 

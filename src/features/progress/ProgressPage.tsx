@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { BarChart3, Trophy, Flame, Clock, CalendarCheck, Dumbbell, TrendingUp, TrendingDown } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { BarChart3, Trophy, Flame, Clock, CalendarCheck, Dumbbell, TrendingUp, TrendingDown, Scale, Ruler, Camera, History } from 'lucide-react';
+import { SectionHero } from '@/design/SectionHero';
 import { useProfile, useSessions, useSettings } from '@/app/data';
 import { completedSessions, consistencyGrid, exerciseHistory, monthlyCounts, muscleSets, personalRecords, streaks, weeklyCounts } from '@/lib/stats';
 import { averageSessionMinutes, exerciseTrend } from '@/lib/insights';
-import { PageHeader, Empty, Segmented, Bar } from '@/components/ui';
+import { Empty, Segmented, Bar } from '@/components/ui';
 import { BarChart, Heatmap, LineChart } from '@/components/charts';
 import { getExercise } from '@/data/exercises';
 import { MUSCLE_LABEL } from '@/lib/labels';
@@ -19,19 +20,34 @@ export default function ProgressPage() {
   const settings = useSettings();
   const profile = useProfile();
   const units = settings.units;
-  const [tab, setTab] = useState<Tab>('overview');
+  const [sp] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (['overview', 'exercises', 'muscles', 'cardio', 'records'].includes(sp.get('tab') ?? '') ? sp.get('tab') as Tab : 'overview'));
   const done = completedSessions(sessions);
   const cardio = useCardioEntries();
 
   if (!done.length && !cardio.length) return (
-    <div className="page stack"><PageHeader title="Progressi" back />
+    <div className="page stack"><SectionHero section="progress" compact title="Progressi" desc="Carichi, volumi, record personali e statistiche cardio, calcolati dai tuoi allenamenti."
+        actions={<><Link to="/body" className="btn primary"><Scale size={17} /> Peso e misure</Link><Link to="/energy" className="btn"><Flame size={17} /> Bilancio</Link></>} />
+      <div className="related five">
+        <Link to="/body" style={{ ['--sc' as string]: 'var(--c-progress)' } as React.CSSProperties}><Ruler size={17} /> Misure</Link>
+        <Link to="/body?tab=photos" style={{ ['--sc' as string]: 'var(--c-progress)' } as React.CSSProperties}><Camera size={17} /> Foto</Link>
+        <Link to="/history" style={{ ['--sc' as string]: 'var(--c-training)' } as React.CSSProperties}><History size={17} /> Storico</Link>
+        <Link to="/goals" style={{ ['--sc' as string]: 'var(--warning)' } as React.CSSProperties}><Trophy size={17} /> Traguardi</Link>
+      </div>
       <Empty icon={<BarChart3 />} title="Ancora nessun dato" text="Completa il primo allenamento: grafici, record e statistiche si costruiscono automaticamente dai tuoi dati reali." action={<Link to="/workouts" className="btn primary">Inizia ad allenarti</Link>} />
     </div>
   );
 
   return (
     <div className="page stack">
-      <PageHeader title="Progressi" back />
+      <SectionHero section="progress" compact title="Progressi" desc="Carichi, volumi, record personali e statistiche cardio, calcolati dai tuoi allenamenti."
+        actions={<><Link to="/body" className="btn primary"><Scale size={17} /> Peso e misure</Link><Link to="/energy" className="btn"><Flame size={17} /> Bilancio</Link></>} />
+      <div className="related five">
+        <Link to="/body" style={{ ['--sc' as string]: 'var(--c-progress)' } as React.CSSProperties}><Ruler size={17} /> Misure</Link>
+        <Link to="/body?tab=photos" style={{ ['--sc' as string]: 'var(--c-progress)' } as React.CSSProperties}><Camera size={17} /> Foto</Link>
+        <Link to="/history" style={{ ['--sc' as string]: 'var(--c-training)' } as React.CSSProperties}><History size={17} /> Storico</Link>
+        <Link to="/goals" style={{ ['--sc' as string]: 'var(--warning)' } as React.CSSProperties}><Trophy size={17} /> Traguardi</Link>
+      </div>
       <div className="tabbar" role="tablist">
         {([['overview', 'Panoramica'], ['exercises', 'Esercizi'], ['muscles', 'Muscoli'], ['cardio', 'Cardio'], ['records', 'Record']] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
       </div>

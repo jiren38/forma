@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Heart, SlidersHorizontal, Clock, X, Library } from 'lucide-react';
-import { CATEGORY_LABEL, CATEGORY_ORDER, EXERCISES, KIND_LABEL, MOVEMENT_LABEL, getExercise, inCategory, isAvailable, type ExCategory, type ExKind, type Movement } from '@/data/exercises';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { SectionHero } from '@/design/SectionHero';
+import { ArtPanel } from '@/design/Art';
+import { CATEGORY_TINT, CATEGORY_VISUAL, FEATURED_CATEGORIES } from '@/design/visuals';
+import { Heart, SlidersHorizontal, Clock, X, Library, ChevronRight, Dumbbell } from 'lucide-react';
+import { CATEGORY_LABEL, CATEGORY_ORDER, EXERCISES, KIND_LABEL, MOVEMENT_LABEL, getExercise, inCategory, isAvailable, type ExCategory, type ExKind, type Movement, type Exercise } from '@/data/exercises';
 import { EQUIPMENT_LABEL, MUSCLE_LABEL } from '@/lib/labels';
 import { useMeta, useProfile, toggleFavorite } from '@/app/data';
 import { availableEquipment } from '@/lib/generator';
 import { PageHeader, SearchInput, Sheet, Empty, Chips } from '@/components/ui';
-import { ExerciseRow, searchExercises } from './components';
+import { ExerciseCard, searchExercises } from './components';
 import type { Equipment, MuscleGroup } from '@/lib/types';
 
 interface Filters { primary: MuscleGroup[]; secondary: MuscleGroup[]; equipment: Equipment[]; difficulty: number[]; movement: Movement[]; kind: ExKind[]; onlyAvailable: boolean }
@@ -23,7 +26,7 @@ export default function ExerciseLibrary() {
   const profile = useProfile();
   const [q, setQ] = useState(sp.get('q') ?? '');
   const cat = (sp.get('cat') ?? 'all') as ExCategory | 'all' | 'fav' | 'recent';
-  const setCat = (c: string) => { const n = new URLSearchParams(sp); if (c === 'all') n.delete('cat'); else n.set('cat', c); setSp(n, { replace: true }); };
+  const setCat = (c: string) => { const n = new URLSearchParams(sp); if (c === 'all') { n.delete('cat'); n.set('view', 'all'); } else { n.set('cat', c); n.delete('view'); } setSp(n); };
   const [f, setF] = useState<Filters>(EMPTY);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [limit, setLimit] = useState(40);
@@ -50,13 +53,79 @@ export default function ExerciseLibrary() {
     return { ...cur, [k]: arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v] };
   });
 
+  const filtersSheet = (
+    <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filtri" wide footer={<><button className="btn grow" onClick={() => setF(EMPTY)}>Azzera</button><button className="btn primary grow" onClick={() => setFiltersOpen(false)}>Mostra {list.length} risultati</button></>}>
+        <div className="stack">
+          <label className="row-between" style={{ cursor: 'pointer' }}><span><b>Solo con la mia attrezzatura</b><div className="tiny muted">In base a quanto indicato nel profilo</div></span><input type="checkbox" checked={f.onlyAvailable} onChange={(e) => setF({ ...f, onlyAvailable: e.target.checked })} style={{ width: 20, height: 20, accentColor: 'var(--accent)' }} /></label>
+          <FilterGroup title="Tipo" items={Object.keys(KIND_LABEL) as ExKind[]} label={(k) => KIND_LABEL[k]} sel={f.kind} onToggle={(v) => toggle('kind', v)} />
+          <FilterGroup title="Muscolo principale" items={MUSCLES} label={(m) => MUSCLE_LABEL[m]} sel={f.primary} onToggle={(v) => toggle('primary', v)} />
+          <FilterGroup title="Muscolo secondario" items={SEC_MUSCLES} label={(m) => MUSCLE_LABEL[m]} sel={f.secondary} onToggle={(v) => toggle('secondary', v)} />
+          <FilterGroup title="Attrezzatura" items={EQUIPS} label={(m) => EQUIPMENT_LABEL[m]} sel={f.equipment} onToggle={(v) => toggle('equipment', v)} />
+          <FilterGroup title="Difficoltà" items={[1, 2, 3]} label={(d) => DIFF[d]} sel={f.difficulty} onToggle={(v) => toggle('difficulty', v)} />
+          <FilterGroup title="Tipo di movimento" items={Object.keys(MOVEMENT_LABEL) as Movement[]} label={(m) => MOVEMENT_LABEL[m]} sel={f.movement} onToggle={(v) => toggle('movement', v)} />
+        </div>
+      </Sheet>
+  );
+
+  const browse = cat === 'all' && !q && nFilters === 0 && sp.get('view') !== 'all';
+  const favList = meta.favorites.map(getExercise).filter((e): e is NonNullable<typeof e> => !!e);
+  const recentList = meta.recent.map(getExercise).filter((e): e is NonNullable<typeof e> => !!e);
+  const count = (c: ExCategory) => EXERCISES.filter((e) => inCategory(e, c)).length;
+  const heart = (e: Exercise) => (
+    <button className="exc-fav" onClick={(ev) => { ev.stopPropagation(); toggleFavorite(e.id); }} aria-label={meta.favorites.includes(e.id) ? `Rimuovi ${e.name} dai preferiti` : `Aggiungi ${e.name} ai preferiti`} aria-pressed={meta.favorites.includes(e.id)}>
+      <Heart size={16} fill={meta.favorites.includes(e.id) ? 'currentColor' : 'none'} />
+    </button>
+  );
+  const title = cat === 'all' ? (q ? 'Risultati' : 'Tutti gli esercizi') : cat === 'fav' ? 'Preferiti' : cat === 'recent' ? 'Visti di recente' : CATEGORY_LABEL[cat];
+  const tint = cat !== 'all' && cat !== 'fav' && cat !== 'recent' ? CATEGORY_TINT[cat] : undefined;
+
+  const searchBar = (
+    <div className="row" style={{ gap: 8 }}>
+      <div className="grow"><SearchInput value={q} onChange={(v) => { setQ(v); setLimit(40); }} placeholder="Cerca: panca, squat, glutei, manubri…" /></div>
+      <button className={`btn ${nFilters ? 'soft' : ''}`} onClick={() => setFiltersOpen(true)} aria-label="Filtri"><SlidersHorizontal size={18} />{nFilters ? ` ${nFilters}` : ''}</button>
+    </div>
+  );
+
+  if (browse) {
+    return (
+      <div className="page stack">
+        <SectionHero section="exercises" title="Esercizi" desc={`${EXERCISES.length} esercizi con animazione, muscoli coinvolti e guida tecnica.`}
+          actions={<><button className="btn primary" onClick={() => setSp({ view: 'all' }, { replace: false })}><Library size={17} /> Sfoglia tutti</button><button className="btn" onClick={() => setCat('fav')}><Heart size={17} /> Preferiti</button></>} />
+        {searchBar}
+        {(favList.length > 0 || recentList.length > 0) && (
+          <section>
+            <div className="section-title">{favList.length ? 'I tuoi preferiti' : 'Visti di recente'} <button className="link-btn small" onClick={() => setCat(favList.length ? 'fav' : 'recent')}>Vedi tutti <ChevronRight size={15} /></button></div>
+            <div className="hscroll exc-strip">
+              {(favList.length ? favList : recentList).slice(0, 10).map((e) => <ExerciseCard key={e.id} e={e} onClick={() => nav(`/exercises/${e.id}`)} action={heart(e)} />)}
+            </div>
+          </section>
+        )}
+        <section>
+          <div className="section-title">Gruppi muscolari</div>
+          <div className="cat-grid">
+            {FEATURED_CATEGORIES.map((c, i) => <CategoryCard key={c} c={c} n={count(c)} i={i} onClick={() => setCat(c)} />)}
+          </div>
+        </section>
+        <section>
+          <div className="section-title">Altre categorie</div>
+          <div className="cat-grid small">
+            {CATEGORY_ORDER.filter((c) => !FEATURED_CATEGORIES.includes(c)).map((c, i) => <CategoryCard key={c} c={c} n={count(c)} i={i} small onClick={() => setCat(c)} />)}
+          </div>
+        </section>
+        <Link to="/workouts" className="card clickable row" style={{ ['--sc' as string]: 'var(--c-training)' } as React.CSSProperties}>
+          <span className="li-icon sec-ic" style={{ width: 42, height: 42, borderRadius: 13, display: 'grid', placeItems: 'center' }}><Dumbbell size={20} /></span>
+          <span className="grow"><b>Componi la tua scheda</b><div className="small muted">Da ogni esercizio puoi aggiungerlo direttamente a una scheda o all’allenamento in corso.</div></span>
+          <ChevronRight className="muted" />
+        </Link>
+        {filtersSheet}
+      </div>
+    );
+  }
+
   return (
     <div className="page stack">
-      <PageHeader title="Esercizi" sub={`${EXERCISES.length} esercizi con animazione e guida tecnica`} />
-      <div className="row" style={{ gap: 8 }}>
-        <div className="grow"><SearchInput value={q} onChange={(v) => { setQ(v); setLimit(40); }} placeholder="Cerca: panca, squat, glutei, manubri…" /></div>
-        <button className={`btn ${nFilters ? 'soft' : ''}`} onClick={() => setFiltersOpen(true)} aria-label="Filtri"><SlidersHorizontal size={18} />{nFilters ? ` ${nFilters}` : ''}</button>
-      </div>
+      <PageHeader title={title} back={browse ? undefined : '/exercises'} crumb={title} sub={tint ? CATEGORY_VISUAL[cat as ExCategory].hint : undefined} />
+      {searchBar}
       <Chips role="tablist" aria-label="Categorie">
         <button className={`chip ${cat === 'all' ? 'on' : ''}`} onClick={() => setCat('all')}>Tutti</button>
         <button className={`chip ${cat === 'fav' ? 'on' : ''}`} onClick={() => setCat('fav')}><Heart size={13} /> Preferiti {meta.favorites.length ? `(${meta.favorites.length})` : ''}</button>
@@ -79,29 +148,27 @@ export default function ExerciseLibrary() {
       {list.length === 0 ? (
         <Empty icon={cat === 'fav' ? <Heart /> : <Library />} title={cat === 'fav' ? 'Nessun preferito' : cat === 'recent' ? 'Nessun esercizio visto di recente' : 'Nessun risultato'} text={cat === 'fav' ? 'Tocca il cuore su un esercizio per salvarlo qui.' : 'Prova con un altro termine o rimuovi qualche filtro.'} />
       ) : (
-        <div className="desk-grid">
-          {list.slice(0, limit).map((e) => (
-            <ExerciseRow key={e.id} e={e} onClick={() => nav(`/exercises/${e.id}`)}
-              right={<button className="icon-btn ghost" onClick={(ev) => { ev.stopPropagation(); toggleFavorite(e.id); }} aria-label={meta.favorites.includes(e.id) ? `Rimuovi ${e.name} dai preferiti` : `Aggiungi ${e.name} ai preferiti`} aria-pressed={meta.favorites.includes(e.id)}>
-                <Heart size={18} fill={meta.favorites.includes(e.id) ? 'var(--accent)' : 'none'} color={meta.favorites.includes(e.id) ? 'var(--accent)' : 'currentColor'} />
-              </button>} />
-          ))}
+        <div className="exc-grid" style={tint ? { ['--tint' as string]: tint } as React.CSSProperties : undefined}>
+          {list.slice(0, limit).map((e) => <ExerciseCard key={e.id} e={e} onClick={() => nav(`/exercises/${e.id}`)} action={heart(e)} />)}
         </div>
       )}
       {list.length > limit && <button className="btn block" onClick={() => setLimit((l) => l + 60)}>Mostra altri ({list.length - limit})</button>}
-
-      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filtri" wide footer={<><button className="btn grow" onClick={() => setF(EMPTY)}>Azzera</button><button className="btn primary grow" onClick={() => setFiltersOpen(false)}>Mostra {list.length} risultati</button></>}>
-        <div className="stack">
-          <label className="row-between" style={{ cursor: 'pointer' }}><span><b>Solo con la mia attrezzatura</b><div className="tiny muted">In base a quanto indicato nel profilo</div></span><input type="checkbox" checked={f.onlyAvailable} onChange={(e) => setF({ ...f, onlyAvailable: e.target.checked })} style={{ width: 20, height: 20, accentColor: 'var(--accent)' }} /></label>
-          <FilterGroup title="Tipo" items={Object.keys(KIND_LABEL) as ExKind[]} label={(k) => KIND_LABEL[k]} sel={f.kind} onToggle={(v) => toggle('kind', v)} />
-          <FilterGroup title="Muscolo principale" items={MUSCLES} label={(m) => MUSCLE_LABEL[m]} sel={f.primary} onToggle={(v) => toggle('primary', v)} />
-          <FilterGroup title="Muscolo secondario" items={SEC_MUSCLES} label={(m) => MUSCLE_LABEL[m]} sel={f.secondary} onToggle={(v) => toggle('secondary', v)} />
-          <FilterGroup title="Attrezzatura" items={EQUIPS} label={(m) => EQUIPMENT_LABEL[m]} sel={f.equipment} onToggle={(v) => toggle('equipment', v)} />
-          <FilterGroup title="Difficoltà" items={[1, 2, 3]} label={(d) => DIFF[d]} sel={f.difficulty} onToggle={(v) => toggle('difficulty', v)} />
-          <FilterGroup title="Tipo di movimento" items={Object.keys(MOVEMENT_LABEL) as Movement[]} label={(m) => MOVEMENT_LABEL[m]} sel={f.movement} onToggle={(v) => toggle('movement', v)} />
-        </div>
-      </Sheet>
+      {filtersSheet}
     </div>
+  );
+}
+
+function CategoryCard({ c, n, i, small, onClick }: { c: ExCategory; n: number; i: number; small?: boolean; onClick: () => void }) {
+  const v = CATEGORY_VISUAL[c];
+  const tint = CATEGORY_TINT[c] ?? 'var(--c-exercises)';
+  return (
+    <button className={`cat-card ${small ? 'small' : ''}`} onClick={onClick} style={{ ['--sc' as string]: tint, animationDelay: `${i * 0.035}s` } as React.CSSProperties} aria-label={`${CATEGORY_LABEL[c]}: ${n} esercizi`}>
+      <ArtPanel spec={{ kind: 'figure', pattern: v.pattern, muscles: v.muscles, phase: v.phase, scene: 'studio' }} color={tint} color2="#15161c" className="cat-art" />
+      <span className="cat-body">
+        <b>{CATEGORY_LABEL[c]}</b>
+        <span>{small ? `${n} esercizi` : `${n} esercizi · ${v.hint}`}</span>
+      </span>
+    </button>
   );
 }
 

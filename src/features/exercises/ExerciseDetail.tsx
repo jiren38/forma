@@ -1,7 +1,7 @@
 import { defaultPlanFor, isCardioExercise, templateCardio } from '@/lib/cardio';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Heart, Plus, AlertTriangle, Wind, ListChecks, XCircle, Lightbulb, Trophy, Dumbbell, Info, Repeat, Shuffle, Target } from 'lucide-react';
+import { Heart, Plus, AlertTriangle, Wind, ListChecks, XCircle, Lightbulb, Trophy, Dumbbell, Info, Repeat, Shuffle, Target, Timer, Layers } from 'lucide-react';
 import { getExercise, contentFor, variantsOf, alternativesOf, CATEGORY_LABEL, KIND_LABEL, MOVEMENT_LABEL, type Exercise } from '@/data/exercises';
 import { MUSCLE_LABEL, EQUIPMENT_LABEL, INJURY_LABEL } from '@/lib/labels';
 import { useMeta, useProfile, useSessions, useSettings, useTemplates, toggleFavorite, pushRecent, saveTemplate } from '@/app/data';
@@ -11,7 +11,9 @@ import { PageHeader, Empty, Sheet, Segmented, useToast } from '@/components/ui';
 import { LineChart } from '@/components/charts';
 import { fmtW, formatShortDate, uid, toDisplayWeight } from '@/lib/util';
 import { ExerciseVisual, useExerciseMedia } from './media';
-import { equipmentText } from './components';
+import { equipmentText, ExerciseCard } from './components';
+import { CATEGORY_TINT } from '@/design/visuals';
+import { exerciseLogFor, saveSession } from '@/features/workouts/session';
 
 const DIFF = ['', 'Facile', 'Intermedio', 'Avanzato'];
 
@@ -29,6 +31,8 @@ export default function ExerciseDetail() {
   const [metric, setMetric] = useState<'e1rm' | 'weight' | 'volume' | 'reps'>('e1rm');
   const media = useExerciseMedia(e?.id);
   const [schematic, setSchematic] = useState(false);
+  const [tab, setTab] = useState<'guide' | 'tips' | 'progress' | 'similar'>('guide');
+  const live = sessions.find((x) => x.status === 'active');
   const units = settings.units;
 
   useEffect(() => { if (e) pushRecent(e.id); }, [e?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -62,29 +66,39 @@ export default function ExerciseDetail() {
     y: metric === 'e1rm' ? toDisplayWeight(h.e1rm, units)! : metric === 'weight' ? toDisplayWeight(h.bestWeight, units)! : metric === 'volume' ? toDisplayWeight(h.volume, units)! : h.totalReps,
   }));
 
+  const tint = CATEGORY_TINT[e.category] ?? 'var(--c-exercises)';
+  async function addToLive() {
+    if (!live) return;
+    await saveSession({ ...live, exercises: [...live.exercises, exerciseLogFor(e!.id, sessions, { restSec: settings.restDefaultSec })] });
+    toast(`Aggiunto a “${live.name}”`);
+  }
+
   return (
-    <div className="page stack">
-      <PageHeader title={e.name} back sub={e.nameEn}
-        right={<button className="icon-btn" onClick={() => { toggleFavorite(e.id); toast(fav ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti'); }} aria-pressed={fav} aria-label={fav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}>
-          <Heart size={20} fill={fav ? 'var(--accent)' : 'none'} color={fav ? 'var(--accent)' : 'currentColor'} />
+    <div className="page stack ex-page" style={{ ['--tint' as string]: tint } as React.CSSProperties}>
+      <PageHeader title={e.name} back sub={e.nameEn} crumb={CATEGORY_LABEL[e.category]}
+        right={<button className={`icon-btn fav-btn ${fav ? 'on' : ''}`} onClick={() => { toggleFavorite(e.id); toast(fav ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti'); }} aria-pressed={fav} aria-label={fav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}>
+          <Heart size={20} fill={fav ? 'currentColor' : 'none'} />
         </button>} />
 
       <div className="ex-hero">
         <div className="stack-sm sticky-col">
-          <ExerciseVisual exerciseId={e.id} preferSchematic={schematic} patternId={e.pattern} muscles={e.primary} controls label={e.name} />
+          <div className="ex-stage">
+            <ExerciseVisual exerciseId={e.id} preferSchematic={schematic} patternId={e.pattern} muscles={e.primary} controls label={e.name} />
+          </div>
           {media && <div className="segmented" role="radiogroup" aria-label="Tipo di animazione">{[['Realistica', false], ['Schematica', true]].map(([l, v]) => <button key={String(l)} role="radio" aria-checked={schematic === v} className={schematic === v ? 'on' : ''} onClick={() => setSchematic(v as boolean)}>{l as string}</button>)}</div>}
           {(!media || schematic) && <div className="legend"><span><i style={{ background: 'var(--accent)' }} />Muscoli principali evidenziati</span></div>}
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn primary grow" onClick={() => (templates.length ? setAddOpen(true) : nav('/workouts'))}><Plus size={17} /> Aggiungi a una scheda</button>
+          <div className="ex-actions">
+            <button className="btn primary grow" onClick={() => (templates.length ? setAddOpen(true) : nav('/workouts?new=1'))}><Plus size={17} /> {templates.length ? 'Aggiungi a una scheda' : 'Crea una scheda'}</button>
+            {live && <button className="btn grow" onClick={addToLive}><Timer size={17} /> All’allenamento in corso</button>}
           </div>
         </div>
 
         <div className="stack">
           <div className="row wrap" style={{ gap: 6 }}>
-            <span className="pill accent">{CATEGORY_LABEL[e.category]}</span>
+            <span className="pill tint">{CATEGORY_LABEL[e.category]}</span>
+            <span className="pill">{DIFF[e.difficulty]}</span>
             <span className="pill">{KIND_LABEL[e.kind]}</span>
             <span className="pill">{MOVEMENT_LABEL[e.movement]}</span>
-            <span className="pill">{DIFF[e.difficulty]}</span>
             <span className="pill">{e.mechanic === 'compound' ? 'Multiarticolare' : 'Monoarticolare'}</span>
             {e.unilateral && <span className="pill">Unilaterale</span>}
             {!available && <span className="pill orange">Attrezzatura non indicata nel profilo</span>}
@@ -94,24 +108,36 @@ export default function ExerciseDetail() {
             <div className="banner warn"><AlertTriangle size={18} /><span>Questo esercizio sollecita zone che hai segnalato ({risky.map((z) => INJURY_LABEL[z].toLowerCase()).join(', ')}). Valuta un’alternativa più confortevole e, in caso di dolore, interrompi e rivolgiti a un medico o fisioterapista.</span></div>
           )}
 
-          <p className="text-2" style={{ lineHeight: 1.6 }}>{c.description}</p>
+          <p className="text-2 ex-desc">{c.description}</p>
 
-          <div className="card">
-            <dl className="kv">
-              <dt>Muscoli principali</dt><dd>{e.primary.map((m) => MUSCLE_LABEL[m]).join(', ')}</dd>
-              <dt>Muscoli secondari</dt><dd>{e.secondary.length ? e.secondary.map((m) => MUSCLE_LABEL[m]).join(', ') : '–'}</dd>
-              <dt>Attrezzatura</dt><dd>{equipmentText(e)}</dd>
-            </dl>
+          <div className="facts">
+            <div><span className="f-ic"><Target size={16} /></span><span className="f-l">Muscoli principali</span><b>{e.primary.map((m) => MUSCLE_LABEL[m]).join(', ')}</b></div>
+            <div><span className="f-ic"><Layers size={16} /></span><span className="f-l">Secondari</span><b>{e.secondary.length ? e.secondary.map((m) => MUSCLE_LABEL[m]).join(', ') : '–'}</b></div>
+            <div><span className="f-ic"><Dumbbell size={16} /></span><span className="f-l">Attrezzatura</span><b>{equipmentText(e)}</b></div>
           </div>
 
-          <Section icon={<Target size={18} />} title="Posizione di partenza"><p style={{ lineHeight: 1.6 }}>{c.setup}</p></Section>
-          <Section icon={<ListChecks size={18} />} title="Esecuzione passo passo"><ol className="steps">{c.steps.map((s, i) => <li key={i}>{s}</li>)}</ol></Section>
-          <Section icon={<Wind size={18} />} title="Respirazione"><p style={{ lineHeight: 1.6 }}>{c.breathing}</p></Section>
-          <Section icon={<XCircle size={18} />} title="Errori comuni"><ul className="bullets bad">{c.mistakes.map((s, i) => <li key={i}>{s}</li>)}</ul></Section>
-          <Section icon={<Lightbulb size={18} />} title="Consigli utili"><ul className="bullets good">{c.tips.map((s, i) => <li key={i}>{s}</li>)}</ul></Section>
+          <div className="tabbar" role="tablist" aria-label="Contenuti esercizio">
+            {([['guide', 'Tecnica'], ['tips', 'Errori e consigli'], ['progress', 'I tuoi progressi'], ['similar', 'Simili']] as const).map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}{k === 'progress' && hist.length ? ` (${hist.length})` : ''}</button>
+            ))}
+          </div>
+
+          {tab === 'guide' && (
+            <div className="stack tab-pane">
+              <Section icon={<Target size={18} />} title="Posizione di partenza"><p style={{ lineHeight: 1.6 }}>{c.setup}</p></Section>
+              <Section icon={<ListChecks size={18} />} title="Esecuzione passo passo"><ol className="steps">{c.steps.map((st, i) => <li key={i}>{st}</li>)}</ol></Section>
+              <Section icon={<Wind size={18} />} title="Respirazione"><p style={{ lineHeight: 1.6 }}>{c.breathing}</p></Section>
+            </div>
+          )}
+          {tab === 'tips' && (
+            <div className="stack tab-pane">
+              <Section icon={<XCircle size={18} />} title="Errori comuni"><ul className="bullets bad">{c.mistakes.map((st, i) => <li key={i}>{st}</li>)}</ul></Section>
+              <Section icon={<Lightbulb size={18} />} title="Consigli utili"><ul className="bullets good">{c.tips.map((st, i) => <li key={i}>{st}</li>)}</ul></Section>
+            </div>
+          )}
 
           {/* Storico personale */}
-          <Section icon={<Trophy size={18} />} title="I tuoi progressi">
+          {tab === 'progress' && <div className="tab-pane"><Section icon={<Trophy size={18} />} title="I tuoi progressi">
             {hist.length === 0 ? <p className="small muted">Non hai ancora registrato questo esercizio. I record e il grafico compariranno dopo il primo allenamento.</p> : (
               <div className="stack-sm">
                 <div className="grid-2">
@@ -135,10 +161,15 @@ export default function ExerciseDetail() {
                 </div>
               </div>
             )}
-          </Section>
+          </Section></div>}
 
-          {variants.length > 0 && <Related title="Varianti" icon={<Repeat size={18} />} list={variants} />}
-          {alts.length > 0 && <Related title="Alternative ed esercizi simili" icon={<Shuffle size={18} />} list={alts} />}
+          {tab === 'similar' && (
+            <div className="stack tab-pane">
+              {variants.length > 0 && <Related title="Varianti" icon={<Repeat size={18} />} list={variants} />}
+              {alts.length > 0 && <Related title="Alternative ed esercizi simili" icon={<Shuffle size={18} />} list={alts} />}
+              {!variants.length && !alts.length && <p className="small muted">Nessun esercizio simile in libreria.</p>}
+            </div>
+          )}
           <p className="hint">Le indicazioni tecniche sono di carattere generale. Se hai dolore, patologie o dubbi, chiedi a un professionista qualificato.</p>
         </div>
       </div>
@@ -172,14 +203,8 @@ function Related({ title, icon, list }: { title: string; icon: React.ReactNode; 
   return (
     <section>
       <div className="section-title" style={{ marginTop: 6 }}><span className="row" style={{ gap: 6 }}>{icon} {title}</span></div>
-      <div className="hscroll">
-        {list.map((x) => (
-          <button key={x.id} className="ex-card" onClick={() => nav(`/exercises/${x.id}`)}>
-            <ExerciseVisual exerciseId={x.id} patternId={x.pattern} muscles={x.primary} className="thumb" label={x.name} />
-            <span className="n">{x.name}</span>
-            <span className="tiny muted">{EQUIPMENT_LABEL[x.equipment.find((q) => q !== 'bodyweight') ?? 'bodyweight']}</span>
-          </button>
-        ))}
+      <div className="hscroll exc-strip">
+        {list.map((x) => <ExerciseCard key={x.id} e={x} onClick={() => nav(`/exercises/${x.id}`)} />)}
       </div>
     </section>
   );

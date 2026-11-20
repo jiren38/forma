@@ -3,12 +3,14 @@ import { Plus, Bike, Pencil, Trash2, Timer, Route, Flame, HeartPulse } from 'luc
 import { useCardio, useProfile } from '@/app/data';
 import { store } from '@/db/store';
 import { CARDIO_INFO } from '@/lib/labels';
-import { PageHeader, Empty, Sheet, NumberInput, Confirm, Segmented, useToast } from '@/components/ui';
+import { Empty, Sheet, NumberInput, Confirm, Segmented, useToast } from '@/components/ui';
 import { BarChart } from '@/components/charts';
 import { ExerciseAnimation } from '@/features/exercises/anim/render';
 import { addDays, dayKey, fmtN, formatShortDate, fromKey, startOfMonth, startOfWeek, sum, uid } from '@/lib/util';
 import type { CardioLog, CardioType } from '@/lib/types';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { SectionHero } from '@/design/SectionHero';
+import { useEffect } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useCardioEntries } from '@/features/progress/CardioProgress';
 import { CardioIcon } from '@/features/workouts/cardio-ui';
@@ -20,6 +22,16 @@ export function estimateKcal(type: CardioType, minutes: number, weightKg: number
   if (speedKmh && type === 'walk') met = speedKmh < 4 ? 2.8 : speedKmh < 5.5 ? 3.5 : speedKmh < 6.5 ? 4.3 : 5;
   return Math.round(met * weightKg * (minutes / 60));
 }
+
+const QUICK: { type: CardioType; label: string; sub: string }[] = [
+  { type: 'treadmill', label: 'Tapis roulant', sub: 'Velocità, pendenza, distanza' },
+  { type: 'bike', label: 'Cyclette', sub: 'Resistenza e cadenza' },
+  { type: 'run', label: 'Corsa', sub: 'All’aperto' },
+  { type: 'walk', label: 'Camminata', sub: 'Passo e distanza' },
+  { type: 'elliptical', label: 'Ellittica', sub: 'Basso impatto' },
+  { type: 'rower', label: 'Vogatore', sub: 'Tutto il corpo' },
+  { type: 'other', label: 'Personalizzata', sub: 'Nuoto, sport, altro' },
+];
 
 export default function CardioPage() {
   const toast = useToast();
@@ -37,21 +49,42 @@ export default function CardioPage() {
     const ws = addDays(startOfWeek(), -7 * (7 - i)), we = addDays(ws, 7);
     return { label: `${ws.getDate()}/${ws.getMonth() + 1}`, value: sum(all.filter((l) => fromKey(l.date) >= ws && fromKey(l.date) < we).map((l) => l.actualMin)) };
   });
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => { if (sp.get('new') === '1') { setSp({}, { replace: true }); setEdit(blank()); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const blank = (): CardioLog => ({ id: uid('c_'), date: dayKey(), type: 'run', durationMin: 30, distanceKm: null, avgSpeedKmh: null, kcal: null, avgHr: null, maxHr: null, notes: '', createdAt: new Date().toISOString() });
 
   return (
     <div className="page stack">
-      <PageHeader title="Cardio" back right={<button className="btn sm primary" onClick={() => setEdit(blank())}><Plus size={16} /> Registra</button>} />
-      <Segmented label="Periodo" value={period} onChange={setPeriod} options={[{ value: 'week', label: 'Questa settimana' }, { value: 'month', label: 'Questo mese' }]} />
-      <div className="grid-2">
-        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Bike size={13} /> Sessioni</span><span className="v">{inP.length}</span></div></div>
-        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Timer size={13} /> Minuti</span><span className="v">{fmtN(sum(inP.map((l) => l.durationMin)))}</span></div></div>
-        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Route size={13} /> Distanza</span><span className="v">{fmtN(sum(inP.map((l) => l.distanceKm ?? 0)), 1)} km</span></div></div>
-        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Flame size={13} /> Kcal stimate</span><span className="v">{fmtN(sum(inP.map((l) => l.kcal ?? 0)))}</span></div></div>
+      <SectionHero section="cardio" title="Cardio" desc="Tapis roulant, cyclette, corsa e intervalli: dentro le schede o registrati a parte."
+        actions={<><button className="btn primary" onClick={() => setEdit(blank())}><Plus size={18} /> Registra attività</button><Link to="/progress?tab=cardio" className="btn"><HeartPulse size={17} /> Progressi</Link></>} />
+
+      <div className="section-title" style={{ marginTop: 6 }}>Inizia un’attività</div>
+      <div className="act-grid">
+        {QUICK.map((q) => (
+          <button key={q.type + q.label} className="act-tile" onClick={() => setEdit({ ...blank(), type: q.type })}>
+            <span className="act-fig"><ExerciseAnimation patternId={CARDIO_INFO[q.type].pattern} muscles={['calves', 'quads']} className="thumb" label={q.label} autoPlay={false} /></span>
+            <b>{q.label}</b><span>{q.sub}</span>
+          </button>
+        ))}
+        <Link to="/workouts" className="act-tile">
+          <span className="act-fig act-int" aria-hidden><i /><i /><i /><i /><i /><i /><i /></span>
+          <b>Intervalli</b><span>Fasi di lavoro e recupero nelle tue schede</span>
+        </Link>
+      </div>
+
+      <div className="row-between" style={{ marginTop: 8 }}>
+        <div className="section-title" style={{ margin: 0 }}>Riepilogo</div>
+        <div style={{ width: 230 }}><Segmented label="Periodo" value={period} onChange={setPeriod} options={[{ value: 'week', label: 'Settimana' }, { value: 'month', label: 'Mese' }]} /></div>
+      </div>
+      <div className="kpis" style={{ ['--sc' as string]: 'var(--c-cardio)' } as React.CSSProperties}>
+        <div><span className="k-ic"><Bike size={16} /></span><b className="num">{inP.length}</b><span>sessioni</span></div>
+        <div><span className="k-ic"><Timer size={16} /></span><b className="num">{fmtN(sum(inP.map((l) => l.durationMin)))}</b><span>minuti</span></div>
+        <div><span className="k-ic"><Route size={16} /></span><b className="num">{fmtN(sum(inP.map((l) => l.distanceKm ?? 0)), 1)}</b><span>km</span></div>
+        <div><span className="k-ic"><Flame size={16} /></span><b className="num">{fmtN(sum(inP.map((l) => l.kcal ?? 0)))}</b><span>kcal stimate</span></div>
       </div>
       {all.length > 0 && <section className="card"><div className="card-title"><h3>Minuti a settimana</h3></div><BarChart ariaLabel="Minuti di cardio per settimana" data={weeks} color="var(--blue)" highlightLast /></section>}
       {fromSessions.length > 0 && <>
-        <div className="section-title">Nelle schede di allenamento <Link to="/progress" className="small accent" style={{ textTransform: 'none', letterSpacing: 0 }}>Progressi</Link></div>
+        <div className="section-title">Nelle schede di allenamento <Link to="/progress?tab=cardio">Progressi <ChevronRight size={15} /></Link></div>
         <div className="settings-group">
           {fromSessions.slice(0, 10).map((e) => (
             <Link key={e.id} to={`/session/${e.sessionId}`} className="list-item">

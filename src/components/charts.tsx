@@ -1,5 +1,5 @@
 /** Grafici SVG leggeri e accessibili, basati esclusivamente sui dati passati. */
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 
 export interface Pt { x: number; y: number; label?: string; tip?: string }
 
@@ -108,5 +108,24 @@ export function Heatmap({ grid }: { grid: { key: string; count: number; future: 
     <div className="heat" style={{ gridTemplateColumns: `repeat(${grid.length}, 1fr)` }} role="img" aria-label="Calendario della costanza: ogni quadrato è un giorno">
       {grid.flat().map((d) => <i key={d.key} className={`${d.count >= 2 ? 'l2' : d.count === 1 ? 'l2' : ''} ${d.future ? 'f' : ''}`} title={`${d.key}: ${d.count} allenamenti`} />)}
     </div>
+  );
+}
+
+/** Mini grafico di tendenza senza assi (per le card riassuntive). Si disegna con un'animazione al primo render. */
+export function Sparkline({ values, color = 'var(--accent)', height = 40 }: { values: number[]; color?: string; height?: number }) {
+  const id = useId().replace(/:/g, '');
+  if (values.length < 2) return null;
+  const W = 120; const H = height;
+  const min = Math.min(...values); const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * W, H - 4 - ((v - min) / span) * (H - 8)] as const);
+  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+
+  return (
+    <svg className="sparkline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={H} aria-hidden>
+      <defs><linearGradient id={`sp${id}`} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.35" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>
+      <path d={`${d} L${W},${H} L0,${H} Z`} fill={`url(#sp${id})`} />
+      <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength={1} className="draw" />
+    </svg>
   );
 }

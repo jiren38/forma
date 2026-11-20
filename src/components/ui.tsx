@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { routeMeta, SECTIONS } from '@/design/sections';
 import { ArrowLeft, Check, CheckCircle2, ChevronLeft, ChevronRight, Search, X, AlertTriangle, Info } from 'lucide-react';
 
 // ---------------- Toast ----------------
@@ -66,20 +67,35 @@ export function Confirm({ open, title, body, confirmLabel = 'Conferma', danger, 
 }
 
 // ---------------- Layout ----------------
-export function PageHeader({ title, back, right, sub, sticky }: { title: ReactNode; back?: boolean | string; right?: ReactNode; sub?: ReactNode; sticky?: boolean }) {
+export function PageHeader({ title, back, right, sub, sticky, crumb }: { title: ReactNode; back?: boolean | string; right?: ReactNode; sub?: ReactNode; sticky?: boolean; crumb?: string }) {
   const nav = useNavigate();
+  const { pathname } = useLocation();
+  const meta = routeMeta(pathname);
+  const sec = SECTIONS[meta.section];
+  const isMain = pathname === sec.to;
+  const showSection = meta.section !== 'home' && meta.section !== 'explore';
+  const desc = sub ?? meta.desc;
+  const here = crumb ?? meta.crumb;
   return (
-    <header className={`page-header ${sticky ? 'sticky' : ''}`}>
-      {back && (
-        <button className="icon-btn ghost" aria-label="Indietro" onClick={() => (typeof back === 'string' ? nav(back) : window.history.length > 1 ? nav(-1) : nav('/'))}>
-          <ArrowLeft size={22} />
-        </button>
-      )}
-      <div className="grow">
-        <h1>{title}</h1>
-        {sub && <div className="muted small">{sub}</div>}
+    <header className={`page-header ${sticky ? 'sticky' : ''}`} style={{ ['--sc' as string]: sec.color } as CSSProperties}>
+      <div className="ph-bar">
+        {back && (
+          <button className="icon-btn" aria-label="Indietro" onClick={() => (typeof back === 'string' ? nav(back) : window.history.length > 1 ? nav(-1) : nav(sec.to))}>
+            <ArrowLeft size={20} />
+          </button>
+        )}
+        <nav className="crumbs grow" aria-label="Percorso">
+          {showSection && ((isMain && !crumb) || !here
+            ? <><Link to="/explore">Esplora</Link><span className="sep">›</span><span className="cur" style={{ color: 'var(--text-2)' }}><i className="dot" style={{ display: 'inline-block', marginRight: 6 }} />{sec.label}</span></>
+            : <><Link to={sec.to}><i className="dot" />{sec.label}</Link><span className="sep">›</span><span className="cur">{here}</span></>)}
+          {!showSection && here && <><Link to="/">Home</Link><span className="sep">›</span><span className="cur">{here}</span></>}
+        </nav>
+        {right && <div className="ph-actions">{right}</div>}
       </div>
-      {right}
+      <div className="ph-title">
+        <h1>{title}</h1>
+        {desc && <div className="ph-sub">{desc}</div>}
+      </div>
     </header>
   );
 }
