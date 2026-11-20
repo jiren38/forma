@@ -388,3 +388,40 @@ describe('cardio per il dimagrimento: obiettivo settimanale', () => {
     expect(weekMin(g)).toBeLessThanOrEqual(90);
   });
 });
+
+describe('cardio per il dimagrimento: tempo disponibile e scelte manuali', () => {
+  const eq: Equipment[] = ['dumbbell', 'flat_bench', 'treadmill'];
+  const user = (o: Partial<Profile> = {}) => profile({ level: 'beginner', goals: ['fat_loss'], weightKg: 76, targetWeightKg: 72, daysPerWeek: 4, minutesPerSession: 90, equipment: eq, ...o });
+
+  it('con sedute da 90 minuti usa il tempo: cardio in ogni seduta e obiettivo raggiunto', () => {
+    const g = generateProgram(user());
+    expect(g.cardioWeek.sessions).toBe(4);
+    expect(g.cardioWeek.minutes).toBeGreaterThanOrEqual(g.cardioWeek.target.start);
+    expect(g.cardioWeek.progressed).toBeGreaterThanOrEqual(150);
+    expect(g.notes.join(' ')).not.toMatch(/sotto i/);
+  });
+  it('le note non suggeriscono mai sedute più corte o uguali a quelle che hai già', () => {
+    for (const minutes of [30, 45, 60, 75, 90, 120]) for (const days of [2, 3, 4, 5]) for (const level of ['beginner', 'intermediate', 'advanced'] as const) {
+      const g = generateProgram(user({ level, minutesPerSession: minutes, daysPerWeek: days }));
+      for (const n of g.notes) { const m = n.match(/sedute da almeno (\d+) minuti/); if (m) expect(Number(m[1]), n).toBeGreaterThan(minutes); }
+    }
+  });
+  it('rispetta i minuti di cardio scelti a mano, entro il tempo della seduta', () => {
+    const g = generateProgram(user(), [], { cardioMinutes: 50 });
+    const plans = g.templates.flatMap((t) => t.exercises.filter((e) => e.cardio));
+    for (const c of plans) { expect(c.cardio!.progression).toBeNull(); expect(planDurationSec(c.cardio!) / 60).toBeLessThanOrEqual(50); }
+    expect(g.cardioWeek.minutes).toBeGreaterThan(generateProgram(user()).cardioWeek.minutes);
+    for (const t of g.templates) expect(templateMinutesExact(t)).toBeLessThanOrEqual(90);
+    // mai più di quanto lascia 20 minuti ai pesi
+    const big = generateProgram(user(), [], { cardioMinutes: 200 });
+    for (const c of big.templates.flatMap((t) => t.exercises.filter((e) => e.cardio))) expect(planDurationSec(c.cardio!) / 60).toBeLessThanOrEqual(70);
+  });
+  it('rispetta le sedute con cardio scelte a mano', () => {
+    const base = { daysPerWeek: 4 } as const;
+    const down = generateProgram(user(), [], { ...base, cardioDays: 2, cardioDaysRound: 'down' });
+    expect(down.cardioWeek.sessions).toBeLessThanOrEqual(2);
+    const up = generateProgram(user({ goals: ['hypertrophy'], targetWeightKg: 76 }), [], { ...base, cardioDays: 4, cardioDaysRound: 'up' });
+    expect(up.cardioWeek.sessions).toBe(4);
+    expect(up.program.schedule.filter(Boolean)).toHaveLength(4);
+  });
+});

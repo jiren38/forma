@@ -228,8 +228,20 @@ export interface GeneratedProgram {
   /** cardio previsto in una settimana tipo, confrontato con l'obiettivo consigliato */
   cardioWeek: CardioWeek;
 }
-export interface CardioWeek { minutes: number; sessions: number; kcal: number | null; target: { start: number; goal: number }; weightLoss: boolean }
-export interface GenerateOptions { split?: SplitKind; daysPerWeek?: number; minutes?: number; variant?: number }
+export interface CardioWeek {
+  minutes: number; sessions: number; kcal: number | null; target: { start: number; goal: number }; weightLoss: boolean;
+  /** minuti settimanali a fine progressione automatica (uguale a minutes se non c'è progressione) */
+  progressed: number;
+  /** minuti medi di cardio per seduta e massimo consentito dal tempo della seduta */
+  perSession: number; maxPerSession: number;
+}
+export interface GenerateOptions {
+  split?: SplitKind; daysPerWeek?: number; minutes?: number; variant?: number;
+  /** scelte dell'utente in Genera programma: sedute con cardio e minuti di cardio per seduta */
+  cardioDays?: number; cardioMinutes?: number;
+  /** se le schede ripetute non permettono il numero esatto di sedute con cardio: arrotonda per eccesso (default) o per difetto */
+  cardioDaysRound?: 'up' | 'down';
+}
 
 const round5 = (n: number) => Math.round(n / 5) * 5;
 const isLowerDay = (name: string) => /lower|legs|gambe/i.test(name);
@@ -256,7 +268,11 @@ export function weeklyCardioTarget(goals: Goal[], level: Profile['level'], weigh
 
 /** Massimo di cardio in una seduta mista per il dimagrimento: metà del tempo, così resta spazio per i pesi che preservano il muscolo. */
 export function maxCardioPerSession(minutes: number): number {
-  return Math.max(10, Math.min(40, Math.floor((minutes * 0.5) / 5) * 5));
+  return Math.max(10, Math.min(45, Math.floor((minutes * 0.5) / 5) * 5));
+}
+/** Limite per la scelta manuale: restano sempre almeno 20 minuti per i pesi. */
+export function userCardioLimit(minutes: number): number {
+  return Math.max(10, Math.floor((minutes - 20) / 5) * 5);
 }
 
 /** Quanti giorni della settimana includono cardio: dipende dall'obiettivo, mai automaticamente tutti. */
@@ -357,7 +373,8 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
   // Caso C: senza macchine cardio il cardio entra solo come attività all'aperto, se l'utente si allena anche fuori.
   const cardioGoal = cardioGoals.some((g) => CARDIO_GOALS.includes(g));
   const target = weeklyCardioTarget(cardioGoals, p.level, weightLoss);
-  const maxPer = weightLoss ? maxCardioPerSession(minutes) : cardioMinutesFor(cardioGoals, minutes);
+  const userMin = opts.cardioMinutes ? Math.max(5, Math.min(userCardioLimit(minutes), round5(opts.cardioMinutes))) : null;
+  const maxPer = userMin ?? (weightLoss ? maxCardioPerSession(minutes) : cardioMinutesFor(cardioGoals, minutes));
   const cardioMachines = analysis.mode === 'mixed' ? analysis.cardioMachines
     : analysis.outdoor && cardioGoal ? analysis.cardioMachines : [];
   const occurrences = Array(distinct).fill(0);
@@ -365,16 +382,19 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
   const withCardio = new Set<number>();
   if (cardioMachines.length && distinct > 0) {
     // dimagrimento: tanti giorni quanti servono per avvicinarsi ai minuti settimanali consigliati (almeno 2 su 3)
-    const daysTarget = weightLoss
+    const userDays = opts.cardioDays != null ? Math.max(1, Math.min(days, opts.cardioDays)) : null;
+    const daysTarget = userDays ?? (weightLoss
       ? Math.min(days, Math.max(cardioDaysTarget(cardioGoals, days), Math.ceil(target.start / maxPer)))
-      : cardioDaysTarget(cardioGoals, days);
+      : cardioDaysTarget(cardioGoals, days));
+    // le schede si ripetono nella settimana: per il dimagrimento meglio un giorno di cardio in più che uno in meno
+    const roundUp = userDays != null ? opts.cardioDaysRound !== 'down' : weightLoss;
     const strengthFocus = !cardioGoals.some((g) => g === 'fat_loss' || g === 'endurance');
     const order = Array.from({ length: distinct }, (_, i) => i)
       .sort((a, b) => (strengthFocus ? Number(isLowerDay(plans[a % plans.length].name)) - Number(isLowerDay(plans[b % plans.length].name)) : 0) || (a % 2) - (b % 2) || a - b);
     let count = 0;
     for (const i of order) {
       if (count >= daysTarget) break;
-      if (count + occurrences[i] > daysTarget && count > 0) continue;
+      if (count + occurrences[i] > daysTarget && count > 0 && !roundUp) continue;
       withCardio.add(i); count += occurrences[i];
     }
   }
@@ -382,9 +402,11 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
   let hardDays = 0, k = variant;
   const cardioDayCount = [...withCardio].reduce((a, i) => a + occurrences[i], 0);
   // minuti per seduta: per il dimagrimento si ripartisce l'obiettivo settimanale sui giorni con cardio
-  const perSession = weightLoss && cardioDayCount
+  const perSession = userMin ?? (weightLoss && cardioDayCount
     ? Math.max(10, Math.min(maxPer, Math.ceil(target.start / cardioDayCount / 5) * 5))
-    : maxPer;
+    : maxPer);
+  // con la progressione il cardio cresce verso il livello "goal" delle linee guida, sempre dentro metà seduta
+  const progressCap = weightLoss && cardioDayCount ? Math.min(maxPer, Math.max(perSession, Math.ceil(target.goal / cardioDayCount / 5) * 5)) : perSession;
 
   const templates: WorkoutTemplate[] = [];
   for (let i = 0; i < distinct; i++) {
@@ -393,13 +415,14 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
     let cardio: TemplateExercise | null = null;
     if (withCardio.has(i)) {
       // i principianti partono più bassi e salgono con la progressione automatica
-      const cmin = lim.beginner && weightLoss ? Math.min(perSession, 20) : perSession;
+      const cmin = userMin ?? (lim.beginner && weightLoss ? Math.min(perSession, 30) : perSession);
       let kind = kinds[k % kinds.length];
       if (HARD.includes(kind) && (isLowerDay(plan.name) || hardDays + occurrences[i] > lim.maxHardPerWeek)) kind = 'steady';
       const machine = pickMachine(cardioMachines, kind, k);
       const built = buildCardio(machine, kind, cmin, p);
       if (built.plan.mode === 'intervals') hardDays += occurrences[i];
-      if (weightLoss && built.plan.mode === 'steady' && built.plan.durationMin < maxPer) built.plan.progression = { stepMin: 5, capMin: maxPer };
+      if (userMin) built.plan.progression = null;
+      else if (weightLoss && built.plan.mode === 'steady' && built.plan.durationMin < progressCap) built.plan.progression = { stepMin: 5, capMin: progressCap };
       cardio = templateCardio(built.exerciseId, built.plan, 'Dopo la parte muscolare');
       k++;
     }
@@ -462,12 +485,12 @@ export function generateProgram(p: Profile, sessions: WorkoutSession[] = [], opt
   }
   if (analysis.mode === 'bodyweight') warnings.push('Con poca attrezzatura il programma usa soprattutto esercizi a corpo libero: aggiungendo elastici o manubri potrai progredire più facilmente.');
   const cardioDays = dayIdx.filter((_, i) => templates[i % templates.length]?.exercises.some((e) => e.cardio)).length;
-  const cardioWeek = weekOf(dayIdx.map((_, i) => templates[i % templates.length]), p, target, weightLoss);
+  const cardioWeek = weekOf(dayIdx.map((_, i) => templates[i % templates.length]), p, target, weightLoss, cardioMachines.length ? userCardioLimit(minutes) : 0);
   if (weightLoss && !goals.includes('fat_loss')) notes.push(`Il tuo peso obiettivo (${p.targetWeightKg} kg) è più basso di quello attuale (${p.weightKg} kg): il cardio è impostato per il dimagrimento.`);
   if (cardioDays) {
     const used = Array.from(new Set(templates.flatMap((t) => t.exercises.filter((e) => e.cardio).map((e) => machineLabel(e.cardio!.machine)))));
     notes.push(`Cardio inserito in ${cardioDays} ${cardioDays === 1 ? 'giorno' : 'giorni'} su ${days} (${used.join(', ')}), alla fine della seduta e senza superare i ${minutes} minuti disponibili.`);
-    notes.push(...shortfallNotes(cardioWeek, cardioDays, minutes, weightLoss));
+    notes.push(...shortfallNotes(cardioWeek, cardioDays, days, minutes, weightLoss, false));
   } else if (analysis.mode === 'strength_only' && cardioGoal) {
     notes.push('Non hai selezionato macchine cardio, quindi la scheda non ne prevede. Se ti va, nei giorni di riposo puoi aggiungere camminate a passo svelto: indica “all’aperto” tra i luoghi di allenamento per inserirle nel programma.');
   }
@@ -494,21 +517,40 @@ function capProgression(t: WorkoutTemplate, minutes: number): WorkoutTemplate {
 }
 
 /** Minuti e calorie (stima) di cardio in una settimana tipo del programma. */
-function weekOf(dayTemplates: (WorkoutTemplate | undefined)[], p: Profile, target: { start: number; goal: number }, weightLoss: boolean): CardioWeek {
+function weekOf(dayTemplates: (WorkoutTemplate | undefined)[], p: Profile, target: { start: number; goal: number }, weightLoss: boolean, maxPerSession: number): CardioWeek {
   const plans = dayTemplates.flatMap((t) => t?.exercises.filter((e) => e.cardio).map((e) => e.cardio!) ?? []);
   const minutes = Math.round(plans.reduce((a, c) => a + planMinutes(c), 0));
+  const progressed = Math.round(plans.reduce((a, c) => a + Math.max(planMinutes(c), c.progression?.capMin ?? 0), 0));
   const kcals = plans.map((c) => estimatePlanKcal(c, p.weightKg));
-  return { minutes, sessions: dayTemplates.filter((t) => t?.exercises.some((e) => e.cardio)).length, kcal: kcals.some((x) => x == null) || !plans.length ? null : kcals.reduce<number>((a, b) => a + (b ?? 0), 0), target, weightLoss };
+  const sessions = dayTemplates.filter((t) => t?.exercises.some((e) => e.cardio)).length;
+  return {
+    minutes, progressed, sessions, target, weightLoss, maxPerSession,
+    perSession: sessions ? Math.round(minutes / sessions) : 0,
+    kcal: kcals.some((x) => x == null) || !plans.length ? null : kcals.reduce<number>((a, b) => a + (b ?? 0), 0),
+  };
 }
 
-function shortfallNotes(w: CardioWeek, cardioDays: number, minutes: number, weightLoss: boolean): string[] {
-  if (!weightLoss) return [];
+/**
+ * Note sul cardio settimanale per il dimagrimento, coerenti con quello che l'utente può fare:
+ * prima la progressione automatica, poi i minuti per seduta (se la seduta ha spazio), solo alla fine sedute più lunghe o più giorni.
+ */
+function shortfallNotes(w: CardioWeek, cardioDays: number, days: number, minutes: number, weightLoss: boolean, cardioOnly: boolean): string[] {
+  if (!weightLoss || !cardioDays) return [];
   const out: string[] = [];
-  if (w.minutes < w.target.start && cardioDays > 0) {
-    const extra = Math.ceil((w.target.start - w.minutes) / cardioDays / 5) * 5;
-    out.push(`Con sedute da ${minutes} minuti arrivi a circa ${w.minutes} minuti di cardio a settimana, sotto i ${w.target.start} consigliati per dimagrire (linee guida OMS e ACSM: 150–300). Per avvicinarti servirebbero sedute da circa ${minutes + extra} minuti oppure più giorni di allenamento.`);
+  if (w.minutes >= w.target.start) {
+    out.push(`Circa ${w.minutes} minuti di cardio a settimana, in linea con le indicazioni per il dimagrimento (linee guida OMS e ACSM: almeno ${w.target.start})${w.progressed > w.minutes + 4 ? `. Quando completi il cardio la durata sale da sola di 5 minuti a seduta, fino a circa ${w.progressed} minuti a settimana` : ''}.`);
+  } else if (w.progressed >= w.target.start) {
+    out.push(`Si parte da ${w.minutes} minuti a settimana per abituarti, poi la durata sale da sola di 5 minuti a seduta quando completi il cardio, fino a circa ${w.progressed} minuti a settimana.`);
   } else {
-    out.push(`Circa ${w.minutes} minuti di cardio a settimana, in linea con le indicazioni per il dimagrimento. La durata cresce gradualmente verso ${w.target.goal} minuti man mano che completi le sedute.`);
+    const needPer = Math.ceil(w.target.start / cardioDays / 5) * 5;
+    if (!cardioOnly && needPer <= w.maxPerSession) {
+      out.push(`Così arrivi a ${w.progressed} minuti di cardio a settimana, sotto i ${w.target.start} consigliati. Le tue sedute da ${minutes} minuti hanno spazio: alza il cardio a ${needPer} minuti per seduta qui sopra (i pesi si adattano al tempo che resta).`);
+    } else if (cardioDays < days) {
+      out.push(`Così arrivi a ${w.progressed} minuti di cardio a settimana, sotto i ${w.target.start} consigliati. Per avvicinarti aumenta le sedute con cardio qui sopra, fino a ${days}.`);
+    } else {
+      const longer = cardioOnly ? needPer : needPer + 20;
+      out.push(`Così arrivi a ${w.progressed} minuti di cardio a settimana, sotto i ${w.target.start} consigliati. Con ${days} sedute servirebbero circa ${needPer} minuti di cardio ciascuna, cioè sedute da almeno ${longer} minuti, oppure un giorno di allenamento in più.`);
+    }
   }
   out.push('Il risultato sulla bilancia dipende soprattutto dall’alimentazione: un deficit moderato (circa 300–500 kcal al giorno) insieme al cardio e ai pesi è la combinazione più efficace.');
   return out;
@@ -577,9 +619,9 @@ function generateCardioProgram(p: Profile, analysis: EquipmentAnalysis, o: { day
     schedule, active: true, source: 'generated', createdAt: now, meta: { split: 'cardio', goal: goals[0], level: p.level, mode: 'cardio_only' },
   };
   templates.forEach((t) => { t.programId = program.id; });
-  const cardioWeek = weekOf(dayTemplates, p, weeklyCardioTarget(goals, p.level, weightLoss), weightLoss);
+  const cardioWeek = weekOf(dayTemplates, p, weeklyCardioTarget(goals, p.level, weightLoss), weightLoss, minutes);
   if (weightLoss && !p.goals?.includes('fat_loss')) notes.push(`Il tuo peso obiettivo (${p.targetWeightKg} kg) è più basso di quello attuale (${p.weightKg} kg): il programma è impostato per il dimagrimento.`);
-  notes.push(...shortfallNotes(cardioWeek, days, minutes, weightLoss && !lim.beginner));
+  notes.push(...shortfallNotes(cardioWeek, days, days, minutes, weightLoss, true));
   return { program, templates, warnings, notes, split: 'cardio', analysis, mode: 'cardio_only', cardioWeek };
 }
 
