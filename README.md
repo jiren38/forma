@@ -159,6 +159,15 @@ Con il certificato locale il funzionamento offline (service worker) non si attiv
 
 **Lettura dei codici**: dove il browser lo offre (Chrome su Android e macOS) si usa il lettore nativo `BarcodeDetector`, altrimenti (iPhone, Firefox, Windows) la libreria open source ZXing, con un lettore UPC-E riscritto perché quello della libreria non funziona. Torcia e zoom compaiono solo se la fotocamera li supporta (su iPhone Safari la torcia non è controllabile dal browser; lo zoom resta disponibile in versione digitale). Se la fotocamera non è disponibile si può sempre digitare il codice.
 
+## 4d. App iPhone nativa (Capacitor + SideStore)
+
+`ios/` contiene il progetto Xcode generato da Capacitor (`capacitor.config.ts`, cartella web `dist/`).
+Il workflow `.github/workflows/ios.yml` compila su macOS un `Forma.ipa` non firmato e, su `main`, lo pubblica
+nella release `ios-latest`. Il Bluetooth passa da `src/lib/ble` (Web Bluetooth nel browser, plugin
+`@capacitor-community/bluetooth-le` nell'app). Installazione sul telefono: [docs/iphone.md](docs/iphone.md).
+
+Dopo una modifica al codice web non serve toccare `ios/`: il workflow esegue `npm run build` e `npx cap sync ios`.
+
 ## 5. Cosa manca o è da completare
 
 - **Notifiche push con app chiusa**: oggi i promemoria arrivano con app aperta o installata e attiva. Per le push vere servono un servizio Web Push (chiavi VAPID) e una funzione pianificata lato server.
