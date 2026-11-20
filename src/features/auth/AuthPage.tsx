@@ -3,10 +3,12 @@ import { Mail, Lock, Smartphone } from 'lucide-react';
 import { useAuth } from '@/app/auth';
 import { BrandMark } from '@/components/brand';
 import { Segmented } from '@/components/ui';
+import { isNativeApp } from '@/lib/native';
 
 
 /** Il login con Google compare solo se il provider è stato attivato su Supabase. */
-const googleLogin = import.meta.env.VITE_GOOGLE_LOGIN === '1';
+// Google richiede un ritorno via browser: nell'app nativa si accede con email e password.
+const googleLogin = import.meta.env.VITE_GOOGLE_LOGIN === '1' && !isNativeApp();
 
 export default function AuthPage() {
   const auth = useAuth();

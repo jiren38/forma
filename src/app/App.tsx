@@ -9,6 +9,7 @@ import { BottomNav, SideNav } from './Navigation';
 import AuthPage from '@/features/auth/AuthPage';
 import Onboarding from '@/features/onboarding/Onboarding';
 import HomePage from '@/features/home/HomePage';
+import { setNativeStatusBar } from '@/lib/native';
 
 const ExplorePage = lazy(() => import('@/features/explore/ExplorePage'));
 const WorkoutsPage = lazy(() => import('@/features/workouts/WorkoutsPage'));
@@ -52,6 +53,7 @@ function ThemeSync() {
     const meta = document.querySelector('meta[name="theme-color"]');
     const dark = s.theme === 'dark' || (s.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     meta?.setAttribute('content', dark ? '#07080a' : '#f3f4f1');
+    void setNativeStatusBar(dark);
   }, [s.theme]);
   return null;
 }

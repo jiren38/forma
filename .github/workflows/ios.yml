@@ -1,0 +1,89 @@
+# Compila l'app iPhone (Capacitor) su un Mac di GitHub e produce Forma.ipa NON firmato.
+# Il file si installa sull'iPhone con SideStore (Apple ID gratuito): è SideStore a firmarlo.
+# - Su main: pubblica Forma.ipa nella release "ios-latest" (indirizzo fisso, scaricabile dall'iPhone).
+# - Su altri rami o a mano: Forma.ipa resta tra gli "Artifacts" dell'esecuzione.
+name: App iPhone
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'ios/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.ts'
+      - 'vite.config.ts'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          # Stesso backend Supabase della versione web (valori pubblici, i dati sono protetti da RLS).
+          VITE_SUPABASE_URL: https://rerlqjukqfofrkodgura.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlcmxxanVrcWZvZnJrb2RndXJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODU0NjksImV4cCI6MjExMDc2MTQ2OX0.2kJ1ZG9Pq6oPYTcMSaujDwImYowSkoAXZA0db8Q1yLA
+      - run: npx cap sync ios
+      - name: Versione di Xcode
+        run: xcodebuild -version
+      - name: Compila (senza firma)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build | tail -n 200
+      - name: Crea Forma.ipa
+        run: |
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app out/Payload/
+          cd out && zip -qry Forma.ipa Payload && ls -lh Forma.ipa
+      - name: Controlla il contenuto dell'app
+        run: |
+          APP=out/Payload/App.app
+          test -f "$APP/public/index.html" || { echo "Manca la build web in public/"; exit 1; }
+          test -f "$APP/capacitor.config.json" || { echo "Manca capacitor.config.json"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          grep -c "rerlqjukqfofrkodgura" "$APP"/public/assets/*.js | grep -v ':0' || { echo "Supabase non configurato nella build"; exit 1; }
+          du -sh "$APP" "$APP/public"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Forma-ipa
+          path: out/Forma.ipa
+          retention-days: 14
+      - name: Pubblica nella release ios-latest
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-latest --yes --cleanup-tag || true
+          gh release create ios-latest out/Forma.ipa \
+            --title "Forma per iPhone (build ${{ github.run_number }})" \
+            --notes "App iPhone non firmata, da installare con SideStore. Compilata da ${{ github.sha }}." \
+            --latest=false
