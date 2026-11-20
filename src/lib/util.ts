@@ -1,3 +1,5 @@
+import { isNativeApp, shareFileNative } from './native';
+
 export const uid = (p = '') => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 /** Data locale YYYY-MM-DD (non UTC). */
@@ -60,6 +62,11 @@ export function normalize(s: string) {
 }
 
 export function downloadFile(name: string, content: string | Blob, type = 'application/json') {
+  if (isNativeApp()) {
+    // App iPhone: niente download dal browser, si usa il foglio di condivisione di iOS
+    void shareFileNative(name, content).catch((e) => console.error('Condivisione file non riuscita', e));
+    return;
+  }
   const blob = content instanceof Blob ? content : new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -2,17 +2,20 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './app/App';
 import './styles/app.css';
+import { isNativeApp } from './lib/native';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
 
 // PWA: service worker solo in produzione e su origini che lo consentono
-if (import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureContext) {
+// Nell'app nativa i file sono già dentro l'app: niente service worker né controllo aggiornamenti dal sito.
+const native = isNativeApp();
+if (import.meta.env.PROD && !native && 'serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').then((r) => r.update()).catch(() => { /* ambiente senza SW */ }); });
 }
 
 // Aggiornamenti: un'app installata o lasciata aperta non ricarica da sola. All'avvio e ogni volta che torna
 // in primo piano controlla version.json; se è uscita una build nuova ricarica la pagina (una volta sola per build).
-if (import.meta.env.PROD) {
+if (import.meta.env.PROD && !native) {
   const check = async () => {
     try {
       const r = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' });

@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { cloudEnabled, supabase } from '@/db/supabase';
 import { store } from '@/db/store';
 import { syncEngine } from '@/db/sync';
+import { authRedirectUrl } from '@/lib/native';
 
 export type AuthState =
   | { status: 'loading' }
@@ -75,16 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw new Error(tr(error.message));
     },
     async signUpEmail(email, password) {
-      const { data, error } = await supabase!.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + window.location.pathname } });
+      const { data, error } = await supabase!.auth.signUp({ email, password, options: { emailRedirectTo: authRedirectUrl() } });
       if (error) throw new Error(tr(error.message));
       return { needsConfirm: !data.session };
     },
     async signInGoogle() {
-      const { error } = await supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+      const { error } = await supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: authRedirectUrl() } });
       if (error) throw new Error(tr(error.message));
     },
     async resetPassword(email) {
-      const { error } = await supabase!.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+      const { error } = await supabase!.auth.resetPasswordForEmail(email, { redirectTo: authRedirectUrl() });
       if (error) throw new Error(tr(error.message));
     },
     async useLocal() { writeFlag(true); await enter('local', 'local'); },

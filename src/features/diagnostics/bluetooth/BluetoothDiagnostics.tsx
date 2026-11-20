@@ -8,6 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bluetooth, BluetoothSearching, Plug, Unplug, Copy, Download, AlertTriangle, Info, Radio, ShieldCheck, Trash2 } from 'lucide-react';
 import { PageHeader, Segmented, useToast } from '@/components/ui';
 import { downloadFile } from '@/lib/util';
+import { getBluetooth, type BluetoothLike } from '@/lib/ble';
+import { isNativeApp } from '@/lib/native';
 import {
   STANDARD_SERVICE_UUIDS, charName, decodeValue, fmtUuid, fullUuid, hex, isControlPoint, parseMachineFeature,
   parseUserUuid, serviceName, shortOf,
@@ -38,17 +40,20 @@ function detectPlatform() {
   const ua = navigator.userAgent;
   const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   const android = /Android/.test(ua);
+  const native = isNativeApp();
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
   const os = ios ? 'iOS/iPadOS' : android ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'macOS' : /Linux|CrOS/.test(ua) ? 'Linux/ChromeOS' : 'sconosciuto';
-  const browser = /Bluefy/i.test(ua) ? 'Bluefy' : /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Chrome|CriOS/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'sconosciuto';
-  return { ios, android, standalone, os, browser, label: `${os} · ${browser}${standalone ? ' · app installata (PWA)' : ' · browser'}` };
+  const browser = native ? 'app nativa Forma' : /Bluefy/i.test(ua) ? 'Bluefy' : /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Chrome|CriOS/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'sconosciuto';
+  const mode = native ? '' : standalone ? ' · app installata (PWA)' : ' · browser';
+  return { ios, android, standalone, native, os, browser, label: `${os} · ${browser}${mode}` };
 }
 
 const VERDICT_CLASS: Record<Verdict, string> = { si: 'success', no: 'danger', parziale: 'orange', 'non-verificato': '' };
 
 export default function BluetoothDiagnostics() {
   const toast = useToast();
-  const bt: any = typeof navigator !== 'undefined' ? (navigator as any).bluetooth : undefined;
+  // Web Bluetooth nel browser, plugin nativo nell'app iPhone (stessa interfaccia, nessuna scrittura).
+  const bt = useMemo(getBluetooth, []);
   const platform = useMemo(detectPlatform, []);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [kind, setKind] = useState<MachineKind>('bike');
@@ -100,7 +105,7 @@ export default function BluetoothDiagnostics() {
     setBusy('search');
     log(null, 'info', ftmsOnly ? 'Ricerca dispositivi che pubblicizzano FTMS (0x1826)…' : 'Ricerca di tutti i dispositivi Bluetooth LE nelle vicinanze…');
     try {
-      const opts = ftmsOnly
+      const opts: Parameters<BluetoothLike['requestDevice']>[0] = ftmsOnly
         ? { filters: [{ services: [fullUuid(0x1826)] }], optionalServices }
         : { acceptAllDevices: true, optionalServices };
       const dev: BtDevice = await bt.requestDevice(opts);
@@ -279,10 +284,11 @@ export default function BluetoothDiagnostics() {
             <button className="btn primary" disabled={!!busy} onClick={() => search(false)}><Bluetooth size={16} /> Cerca tutti i dispositivi</button>
             <button className="btn" disabled={!!busy} onClick={() => search(true)}><Radio size={16} /> Cerca solo FTMS</button>
           </div>
-          <p className="hint">Il browser apre una finestra con i dispositivi nelle vicinanze: scegli il tuo attrezzo. Prova prima “Cerca solo FTMS”: se l’attrezzo compare anche lì, pubblicizza il protocollo standard Fitness Machine. Se non compare, usa “Cerca tutti”.</p>
+          <p className="hint">{bt.backend === 'native' ? 'Si apre un elenco con i dispositivi nelle vicinanze (la ricerca dura fino a 30 secondi): scegli il tuo attrezzo.' : 'Il browser apre una finestra con i dispositivi nelle vicinanze: scegli il tuo attrezzo.'} Prova prima “Cerca solo FTMS”: se l’attrezzo compare anche lì, pubblicizza il protocollo standard Fitness Machine. Se non compare, usa “Cerca tutti”.</p>
           <details>
             <summary className="small">UUID aggiuntivi da esplorare (facoltativo)</summary>
             <div className="stack-sm" style={{ marginTop: 8 }}>
+              {bt.backend === 'native' && <p className="hint">Nell’app iPhone vengono già mostrati tutti i servizi dell’attrezzo, anche quelli proprietari: di solito questo campo non serve.</p>}
               <p className="hint">Web Bluetooth mostra solo i servizi dichiarati prima della ricerca. Qui sono già inclusi tutti i servizi standard per il fitness. Se nRF Connect mostra sull’attrezzo un servizio proprietario, scrivi qui il suo UUID (es. quello a 16 o 128 bit che vedi in nRF Connect) e ripeti la ricerca.</p>
               <input className={`input ${badExtra.length ? 'invalid' : ''}`} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="UUID separati da virgola" aria-label="UUID aggiuntivi" />
               {badExtra.length > 0 && <div className="tiny danger-text">Non validi: {badExtra.join(', ')}</div>}
@@ -345,19 +351,19 @@ export default function BluetoothDiagnostics() {
   );
 }
 
-function Environment({ bt, available, platform }: { bt: any; available: boolean | null; platform: ReturnType<typeof detectPlatform> }) {
+function Environment({ bt, available, platform }: { bt: BluetoothLike | undefined; available: boolean | null; platform: ReturnType<typeof detectPlatform> }) {
   const secure = typeof window !== 'undefined' && window.isSecureContext;
   return (
     <section className="card stack-sm">
       <div className="card-title" style={{ marginBottom: 4 }}><h3><Info size={18} /> Questo dispositivo</h3></div>
       <div className="bt-kv"><span>Sistema e browser</span><b>{platform.label}</b></div>
-      <div className="bt-kv"><span>Web Bluetooth</span><b className={bt ? 'success-text' : 'danger-text'}>{bt ? 'disponibile' : 'NON disponibile'}</b></div>
+      <div className="bt-kv"><span>{bt?.backend === 'native' ? 'Bluetooth' : 'Web Bluetooth'}</span><b className={bt ? 'success-text' : 'danger-text'}>{bt ? (bt.backend === 'native' ? 'disponibile (nativo, app iPhone)' : 'disponibile') : 'NON disponibile'}</b></div>
       <div className="bt-kv"><span>Connessione sicura (https)</span><b>{secure ? 'sì' : 'no'}</b></div>
       {bt && <div className="bt-kv"><span>Adattatore Bluetooth</span><b>{available == null ? 'non rilevabile' : available ? 'presente' : 'assente o spento'}</b></div>}
       {!bt && (
         <div className="banner warn"><AlertTriangle size={18} /><span>
           {platform.ios
-            ? <>Su iPhone e iPad <b>Safari, Chrome e l’app installata nella schermata Home non supportano Web Bluetooth</b> (Apple non lo consente a nessun browser basato su WebKit). Per il test su iPhone usa l’app gratuita <b>nRF Connect</b> (Nordic Semiconductor) oppure apri questa pagina nel browser <b>Bluefy</b>. In alternativa fai il test da PC con Chrome/Edge o da Android con Chrome.</>
+            ? <>Su iPhone e iPad <b>Safari, Chrome e l’app installata nella schermata Home non supportano Web Bluetooth</b> (Apple non lo consente a nessun browser basato su WebKit). Usa l’<b>app nativa Forma</b> (installata con SideStore), oppure apri questa pagina nel browser <b>Bluefy</b> o prova con l’app gratuita <b>nRF Connect</b>. In alternativa fai il test da PC con Chrome/Edge o da Android con Chrome.</>
             : platform.browser === 'Firefox'
               ? <>Firefox non supporta Web Bluetooth. Apri questa pagina con <b>Chrome</b> o <b>Edge</b>.</>
               : platform.browser === 'Safari'
