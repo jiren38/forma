@@ -90,6 +90,18 @@ export default function GeneratePage() {
         <p className="hint">L’attrezzatura è un vincolo: il programma usa solo ciò che hai selezionato. <Link to="/profile/equipment" className="accent">Modifica attrezzatura</Link></p>
       </div>
 
+      {g.cardioWeek.sessions > 0 && (
+        <div className="card stack-sm" aria-label="Cardio settimanale">
+          <div className="row-between"><b>Cardio settimanale</b>{g.cardioWeek.weightLoss && <span className="pill blue">Dimagrimento</span>}</div>
+          <div className="row-between small">
+            <span><b>{g.cardioWeek.minutes} min</b> in {g.cardioWeek.sessions} {g.cardioWeek.sessions === 1 ? 'sessione' : 'sessioni'}</span>
+            {g.cardioWeek.kcal != null && <span className="muted">≈ {Math.round(g.cardioWeek.kcal / 10) * 10} kcal (stima)</span>}
+          </div>
+          <div className="bar"><i style={{ width: `${Math.min(100, Math.round((g.cardioWeek.minutes / g.cardioWeek.target.goal) * 100))}%`, background: g.cardioWeek.minutes >= g.cardioWeek.target.start ? 'var(--accent)' : 'var(--blue)' }} /></div>
+          <p className="hint">Obiettivo: almeno {g.cardioWeek.target.start} min a settimana, fino a {g.cardioWeek.target.goal} con la progressione (linee guida OMS e ACSM). Le calorie sono una stima dalle equazioni ACSM e dai valori MET.</p>
+        </div>
+      )}
+
       {g.warnings.map((w, i) => <div key={i} className="banner warn"><AlertTriangle size={18} /><span>{w}</span></div>)}
       {g.notes.map((w, i) => <div key={`n${i}`} className="banner info"><Info size={18} /><span>{w}</span></div>)}
 

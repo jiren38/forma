@@ -12,7 +12,7 @@ import { startSession, saveSession, finishSession } from '@/features/workouts/se
 import type { Equipment, Profile, WorkoutSession, WorkoutTemplate } from '@/lib/types';
 
 const profile = (p: Partial<Profile> = {}): Profile => ({
-  ...defaultProfile(), name: 'Test', age: 35, sex: 'male', heightCm: 178, weightKg: 80, targetWeightKg: 75, level: 'intermediate',
+  ...defaultProfile(), name: 'Test', age: 35, sex: 'male', heightCm: 178, weightKg: 80, targetWeightKg: 80, level: 'intermediate',
   goals: ['fat_loss'], daysPerWeek: 4, minutesPerSession: 45, fullGym: false, location: ['home'], equipment: [], ...p,
 });
 
@@ -109,7 +109,9 @@ describe('TEST 2 – manubri, panca, bilanciere, cyclette e tapis roulant', () =
       const sched = scheduled(g);
       const cardioDays = sched.filter((t) => t.exercises.some((e) => e.cardio)).length;
       expect(cardioDays).toBeGreaterThanOrEqual(1);
-      expect(cardioDays).toBeLessThan(sched.length); // non su ogni singolo giorno
+      // per la massa/forza non su ogni singolo giorno; per il dimagrimento può esserci in ogni seduta
+      if (goals[0] !== 'fat_loss') expect(cardioDays).toBeLessThan(sched.length);
+      else expect(cardioDays).toBeLessThanOrEqual(sched.length);
       for (const t of g.templates.filter((x) => x.exercises.some((e) => e.cardio))) {
         // la scheda contiene entrambe le parti
         expect(t.exercises.some((e) => !e.cardio)).toBe(true);
@@ -324,5 +326,65 @@ describe('sessione live con cardio e storico', () => {
     expect(ended.status).toBe('completed');
     expect(ended.exercises[0].cardio!.actual!.durationSec).toBe(600);
     expect(ended.exercises[0].cardio!.actual!.resistance).toBe(plan.resistance);
+  });
+});
+
+describe('cardio per il dimagrimento: obiettivo settimanale', () => {
+  const eq: Equipment[] = ['dumbbell', 'flat_bench', 'barbell', 'bike', 'treadmill'];
+  const weekMin = (g: GeneratedProgram) => scheduled(g).reduce((a, t) => a + t.exercises.filter((e) => e.cardio).reduce((b, e) => b + planDurationSec(e.cardio!) / 60, 0), 0);
+
+  it('riconosce il dimagrimento dal peso obiettivo anche se l’obiettivo è un altro (76 → 72 kg)', () => {
+    for (const goals of [['recomp'], ['fitness'], ['hypertrophy']] as Profile['goals'][]) {
+      const lose = generateProgram(profile({ goals, weightKg: 76, targetWeightKg: 72, daysPerWeek: 4, minutesPerSession: 45, equipment: eq }));
+      const keep = generateProgram(profile({ goals, weightKg: 76, targetWeightKg: 76, daysPerWeek: 4, minutesPerSession: 45, equipment: eq }));
+      expect(lose.cardioWeek.weightLoss).toBe(true);
+      expect(keep.cardioWeek.weightLoss).toBe(false);
+      expect(weekMin(lose)).toBeGreaterThan(weekMin(keep));
+      expect(lose.notes.join(' ')).toMatch(/peso obiettivo/i);
+    }
+  });
+  it('molti più minuti a settimana di prima (non più 2 × 10 minuti)', () => {
+    const g = generateProgram(profile({ goals: ['recomp'], weightKg: 76, targetWeightKg: 72, daysPerWeek: 4, minutesPerSession: 45, equipment: eq }));
+    expect(weekMin(g)).toBeGreaterThanOrEqual(60);
+    expect(scheduled(g).filter((t) => t.exercises.some((e) => e.cardio)).length).toBeGreaterThanOrEqual(3);
+    expect(g.cardioWeek.minutes).toBe(Math.round(weekMin(g)));
+    expect(g.cardioWeek.target.start).toBeGreaterThanOrEqual(150);
+    expect(g.cardioWeek.kcal).toBeGreaterThan(0);
+    for (const t of g.templates) {
+      const cm = t.exercises.filter((e) => e.cardio).reduce((a, e) => a + planDurationSec(e.cardio!) / 60, 0);
+      if (cm) expect(templateMinutesExact(t) - cm, t.name).toBeGreaterThanOrEqual(15);
+    }
+  });
+  it('raggiunge l’obiettivo minimo quando il tempo lo permette', () => {
+    const g = generateProgram(profile({ goals: ['fat_loss'], daysPerWeek: 5, minutesPerSession: 75, equipment: eq, targetWeightKg: 74 }));
+    expect(weekMin(g)).toBeGreaterThanOrEqual(g.cardioWeek.target.start);
+  });
+  it('nessun giorno extra: le sedute restano quelle scelte e il tempo è rispettato', () => {
+    for (const days of [2, 3, 4, 5]) for (const minutes of [30, 45, 60]) for (const level of ['beginner', 'intermediate', 'advanced'] as const) {
+      const g = generateProgram(profile({ goals: ['fat_loss'], level, targetWeightKg: 72, daysPerWeek: days, minutesPerSession: minutes, equipment: eq }));
+      expect(g.program.schedule.filter(Boolean).length).toBe(days);
+      for (const t of g.templates) {
+        const tot = templateMinutesExact(t);
+        expect(tot, `${days}g ${minutes}' ${level}`).toBeLessThanOrEqual(minutes);
+        const cm = t.exercises.filter((e) => e.cardio).reduce((a, e) => a + planDurationSec(e.cardio!) / 60, 0);
+        if (cm) expect(cm).toBeLessThanOrEqual(Math.max(10, minutes / 2));
+        for (const e of t.exercises) if (e.cardio?.progression) expect(e.cardio.progression.capMin).toBeLessThanOrEqual(Math.max(10, minutes / 2));
+      }
+    }
+  });
+  it('se il tempo non basta lo dice e suggerisce come arrivarci', () => {
+    const g = generateProgram(profile({ goals: ['fat_loss'], targetWeightKg: 72, daysPerWeek: 2, minutesPerSession: 30, equipment: eq }));
+    expect(g.cardioWeek.minutes).toBeLessThan(g.cardioWeek.target.start);
+    expect(g.notes.join(' ')).toMatch(/kcal/);
+  });
+  it('salita reale sul tapis roulant (non più 4%)', () => {
+    const g = generateProgram(profile({ goals: ['fat_loss'], daysPerWeek: 4, minutesPerSession: 60, equipment: ['treadmill', 'dumbbell'] }));
+    const incl = cardioOf(g).flatMap((c) => expandPhases(c.cardio!)).map((ph) => ph.inclinePct ?? 0);
+    expect(Math.max(...incl)).toBeGreaterThanOrEqual(6);
+  });
+  it('per la massa senza dimagrimento il cardio resta leggero', () => {
+    const g = generateProgram(profile({ goals: ['hypertrophy'], daysPerWeek: 4, minutesPerSession: 60, equipment: eq }));
+    expect(g.cardioWeek.weightLoss).toBe(false);
+    expect(weekMin(g)).toBeLessThanOrEqual(90);
   });
 });

@@ -325,7 +325,7 @@ export function buildCardio(machine: CardioMachine, kindIn: CardioKind, minutesI
   const intensity = cap(kind === 'easy' ? 'light' : kind === 'endurance' ? 'moderate' : kind === 'incline' ? (lim.beginner ? 'moderate' : 'vigorous') : 'moderate');
   const run = kind === 'endurance' && machine === 'treadmill' && lim.allowRun && !lim.beginner;
   const vals = kind === 'incline'
-    ? { ...base(intensity), speedKmh: lim.beginner ? 5 : 5.5, inclinePct: lim.beginner ? 4 : p.level === 'advanced' ? 10 : 7 }
+    ? { ...base(intensity), speedKmh: lim.beginner ? 5 : 5.5, inclinePct: lim.beginner ? 6 : p.level === 'advanced' ? 10 : 8 }
     : base(intensity, { run });
   const hr = targetHr(age, intensity);
   let exerciseId = MACHINE_INFO[machine].ex[kind] ?? MACHINE_INFO[machine].ex.steady;
