@@ -113,11 +113,33 @@ export interface CardioActual {
   intensity?: CardioIntensity;
   notes?: string;
   completedAt: string;
+  /** true se le calorie sono quelle misurate dall'attrezzo collegato (non una stima dell'app) */
+  kcalFromMachine?: boolean;
+  /** nome dell'attrezzo Bluetooth da cui arrivano i dati (es. "iConsole+0006") */
+  device?: string | null;
+}
+
+/** Riepilogo dei dati letti dall'attrezzo Bluetooth (FTMS) durante un'attività cardio. */
+export interface CardioMachineData {
+  device: string;
+  kind: 'bike' | 'treadmill';
+  /** secondi in cui l'attrezzo era in movimento */
+  movingSec: number;
+  distanceM: number;
+  kcal: number;
+  avgSpeedKmh?: number | null;
+  maxSpeedKmh?: number | null;
+  avgCadence?: number | null;
+  avgResistance?: number | null;
+  avgIncline?: number | null;
+  avgHr?: number | null;
+  avgPower?: number | null;
+  updatedAt: string;
 }
 
 export interface CardioTimer { running: boolean; startedAt: number | null; accumulatedMs: number }
 
-export interface CardioLogState { plan: CardioPlan; timer: CardioTimer; actual?: CardioActual | null; done: boolean }
+export interface CardioLogState { plan: CardioPlan; timer: CardioTimer; actual?: CardioActual | null; done: boolean; machine?: CardioMachineData | null }
 
 export interface Settings {
   units: Units;

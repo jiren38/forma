@@ -4,16 +4,19 @@
  */
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Pause, Square, MoreHorizontal, Pencil, HeartPulse, Flame, Route, Timer, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Play, Pause, Square, MoreHorizontal, Pencil, HeartPulse, Flame, Route, Timer, CheckCircle2, ChevronRight, Bluetooth } from 'lucide-react';
 import { Bar, NumberInput, Segmented, Sheet } from '@/components/ui';
 import { getExercise } from '@/data/exercises';
 import {
-  INTENSITY_INFO, MACHINE_INFO, PHASE_LABEL, actualFromPlan, estimateActualKcal, expandPhases, phaseAt, phaseParams, planDurationSec, planSummary,
+  INTENSITY_INFO, MACHINE_INFO, PHASE_LABEL, actualFromPlan, applyMachineData, estimateActualKcal, expandPhases, phaseAt, phaseParams, planDurationSec, planSummary,
   startTimer, pauseTimer, timerElapsedMs,
 } from '@/lib/cardio';
 import { formatClock, fmtN, round, vibrate } from '@/lib/util';
 import type { CardioActual, CardioIntensity, CardioLogState, ExerciseLog, Profile } from '@/lib/types';
 import { CardioIcon, CardioPlanLines } from './cardio-ui';
+import { FTMS_MACHINES, MachineLink } from './MachineLink';
+import { liveMachineSummary } from '@/lib/ble/ftms';
+import { hasMachineData } from '@/lib/ftms-live';
 
 function tone(high = false) {
   try {
@@ -54,11 +57,30 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
     if (pos.finished && !reached.current) { reached.current = true; vibrate([200, 100, 200, 100, 200]); tone(true); }
   });
 
+  // dati dell'attrezzo Bluetooth: salvati nell'attività ogni 20 secondi, così non si perdono
+  // se l'app si chiude prima di premere Termina
+  const latest = useRef({ c, onChange });
+  latest.current = { c, onChange };
+  const savedAt = useRef<string | null>(null);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const m = liveMachineSummary(ex.uid);
+      const cur = latest.current.c;
+      if (!m || !hasMachineData(m) || cur.done || m.updatedAt === savedAt.current) return;
+      savedAt.current = m.updatedAt;
+      latest.current.onChange({ ...cur, machine: m });
+    }, 20000);
+    return () => window.clearInterval(id);
+  }, [ex.uid]);
+
+  const machineNow = () => liveMachineSummary(ex.uid) ?? c.machine ?? null;
   const pause = () => onChange({ ...c, timer: pauseTimer(c.timer) });
   function openResult() {
     const t = pauseTimer(c.timer);
-    if (c.timer.running) onChange({ ...c, timer: t });
-    const base = c.actual ?? actualFromPlan(plan, timerElapsedMs(t) / 1000, profile?.weightKg ?? 0);
+    const machine = machineNow();
+    if (c.timer.running || (machine && machine !== c.machine)) onChange({ ...c, timer: t, machine });
+    const w = profile?.weightKg ?? 0;
+    const base = c.actual ?? applyMachineData(actualFromPlan(plan, timerElapsedMs(t) / 1000, w), plan, machine, w);
     setResult(base);
   }
 
@@ -136,12 +158,13 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
             <button className="btn grow" onClick={openResult}><Square size={15} /> {started ? 'Termina' : 'Registra senza timer'}</button>
           </div>
           {sessionPaused && <p className="tiny muted" style={{ marginTop: 6 }}>Allenamento in pausa: riprendilo per avviare il timer.</p>}
+          {FTMS_MACHINES.includes(plan.machine) && <MachineLink uid={ex.uid} c={c} onStartTimer={onStart} canStart={!sessionPaused} />}
         </>
       )}
 
       {result && (
         <ResultSheet key={String(!!c.actual)} initial={result} c={c} profile={profile} onClose={() => setResult(null)}
-          onSave={(a) => { onChange({ ...c, timer: pauseTimer(c.timer), actual: a, done: true }); setResult(null); }}
+          onSave={(a) => { onChange({ ...c, timer: pauseTimer(c.timer), machine: machineNow(), actual: a, done: true }); setResult(null); }}
           onReopen={c.done ? () => { onChange({ ...c, done: false, actual: null }); setResult(null); } : undefined} />
       )}
     </section>
@@ -172,8 +195,9 @@ export function PlannedVsActual({ plan: c }: { plan: CardioLogState }) {
       <div className="row wrap small text-2" style={{ gap: 12, marginTop: 8 }}>
         {a.distanceKm != null && <span className="row" style={{ gap: 4 }}><Route size={14} /> {fmtN(a.distanceKm, 2)} km</span>}
         {a.avgHr != null && <span className="row" style={{ gap: 4 }}><HeartPulse size={14} /> {a.avgHr} bpm</span>}
-        {a.kcal != null && <span className="row" style={{ gap: 4 }}><Flame size={14} /> ~{a.kcal} kcal (stima)</span>}
+        {a.kcal != null && <span className="row" style={{ gap: 4 }}><Flame size={14} /> {a.kcalFromMachine ? `${a.kcal} kcal (dall’attrezzo)` : `~${a.kcal} kcal (stima)`}</span>}
       </div>
+      {a.device && <p className="tiny muted row" style={{ gap: 4, marginTop: 4 }}><Bluetooth size={12} /> Dati letti da {a.device}</p>}
       {a.notes && <p className="tiny text-2" style={{ marginTop: 4 }}>📝 {a.notes}</p>}
     </div>
   );
@@ -181,7 +205,7 @@ export function PlannedVsActual({ plan: c }: { plan: CardioLogState }) {
 
 function ResultSheet({ initial, c, profile, onClose, onSave, onReopen }: { initial: CardioActual; c: CardioLogState; profile?: Profile; onClose: () => void; onSave: (a: CardioActual) => void; onReopen?: () => void }) {
   const [a, setA] = useState<CardioActual>(initial);
-  const [kcalTouched, setKcalTouched] = useState(false);
+  const [kcalTouched, setKcalTouched] = useState(!!initial.kcalFromMachine);
   const info = MACHINE_INFO[c.plan.machine];
   const min = Math.floor(a.durationSec / 60), sec = a.durationSec % 60;
   const set = (x: Partial<CardioActual>) => setA((prev) => {
@@ -196,10 +220,11 @@ function ResultSheet({ initial, c, profile, onClose, onSave, onReopen }: { initi
   return (
     <Sheet open onClose={onClose} title="Valori effettivi" footer={<>
       {onReopen && <button className="btn grow" onClick={onReopen}>Riapri attività</button>}
-      <button className="btn primary grow" disabled={!valid} onClick={() => onSave({ ...a, kcal: kcalTouched ? a.kcal ?? null : est, completedAt: a.completedAt || new Date().toISOString() })}><CheckCircle2 size={16} /> Salva risultato</button>
+      <button className="btn primary grow" disabled={!valid} onClick={() => onSave({ ...a, kcal: kcalTouched ? a.kcal ?? null : est, kcalFromMachine: kcalTouched && !!a.kcalFromMachine, completedAt: a.completedAt || new Date().toISOString() })}><CheckCircle2 size={16} /> Salva risultato</button>
     </>}>
       <div className="stack-sm">
         <p className="small text-2">Registra quello che hai fatto davvero, anche se diverso dal previsto ({planSummary(c.plan)}).</p>
+        {a.device && <div className="banner"><Bluetooth size={18} /><span>Valori letti da <b>{a.device}</b>. Puoi correggerli prima di salvare.</span></div>}
         <div className="grid-2">
           <div className="field"><label><Timer size={13} /> Minuti</label><NumberInput value={min} min={0} max={360} ariaLabel="Minuti effettivi" onChange={(v) => set({ durationSec: Math.max(0, Math.round(v ?? 0)) * 60 + sec })} /></div>
           <div className="field"><label>Secondi</label><NumberInput value={sec} min={0} max={59} ariaLabel="Secondi effettivi" onChange={(v) => set({ durationSec: min * 60 + Math.min(59, Math.max(0, Math.round(v ?? 0))) })} /></div>
@@ -214,8 +239,8 @@ function ResultSheet({ initial, c, profile, onClose, onSave, onReopen }: { initi
           <Segmented label="Intensità percepita" value={(a.intensity ?? c.plan.intensity) as CardioIntensity} onChange={(v) => set({ intensity: v })} options={(['light', 'moderate', 'vigorous', 'high'] as CardioIntensity[]).map((i) => ({ value: i, label: INTENSITY_INFO[i].label }))} />
         </div>
         <div className="field"><label><Flame size={13} /> Calorie (stima)</label>
-          <NumberInput value={kcalTouched ? a.kcal : est} min={0} max={5000} suffix="kcal" ariaLabel="Calorie stimate" onChange={(v) => { setKcalTouched(v != null); set({ kcal: v }); }} />
-          <p className="hint">Stima calcolata da durata, velocità, pendenza o intensità e dal tuo peso: non è una misurazione. Puoi sostituirla con il dato del tuo dispositivo.</p>
+          <NumberInput value={kcalTouched ? a.kcal : est} min={0} max={5000} suffix="kcal" ariaLabel="Calorie stimate" onChange={(v) => { setKcalTouched(v != null); set({ kcal: v, kcalFromMachine: false }); }} />
+          <p className="hint">{a.kcalFromMachine ? 'Calorie indicate dall’attrezzo: anche lui le stima, non le misura.' : 'Stima calcolata da durata, velocità, pendenza o intensità e dal tuo peso: non è una misurazione. Puoi sostituirla con il dato del tuo dispositivo.'}</p>
         </div>
         <div className="field"><label>Note</label><input className="input" value={a.notes ?? ''} onChange={(ev) => set({ notes: ev.target.value })} placeholder="Es. programma della macchina, sensazioni" /></div>
       </div>

@@ -1252,3 +1252,14 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .shop-tools .btn { min-width: 0; }
 .shop-item-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .icon-btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+/* ---- Attrezzo Bluetooth collegato durante il cardio ---- */
+.machine-link { border-radius: var(--radius); padding: 12px; background: var(--surface-2); margin-top: 10px; }
+.machine-link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.machine-link .dot.on { background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); }
+.machine-link .dot.lost { background: var(--orange); }
+.machine-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.machine-tiles .m { background: var(--surface); border-radius: var(--radius-sm); padding: 8px 10px; min-width: 0; }
+.machine-tiles .m .l { font-size: 11px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.machine-tiles .m .v { font-family: var(--font-display); font-weight: 800; font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.machine-tiles .m .v small { font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 2px; }

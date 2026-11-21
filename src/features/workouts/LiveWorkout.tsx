@@ -20,6 +20,7 @@ import { formatClock, formatDuration, fromDisplayWeight, toDisplayWeight, uid, v
 import { discardSession, exerciseLogFor, finishSession, recoverBackup, saveSession, startSession, makeSets } from './session';
 import type { CardioLogState, ExerciseLog, SetLog, WorkoutSession } from '@/lib/types';
 import { CardioLive, startCardioTimer } from './CardioLive';
+import { disconnectFtms } from '@/lib/ble/ftms';
 import { AddCardioSheet, CardioPlanEditor, MachinePicker, convertPlan } from './cardio-ui';
 import { logStateFor, pauseTimer, timerElapsedMs } from '@/lib/cardio';
 
@@ -213,12 +214,14 @@ export default function LiveWorkout() {
     setBusy(true);
     try {
       const ended = await finishSession(session);
+      void disconnectFtms();
       setRest(null);
       nav(`/session/${ended.id}?done=1`, { replace: true });
     } catch (e: any) { toast(e?.message ?? 'Errore nel salvataggio', 'error'); } finally { setBusy(false); }
   }
   async function discard() {
     await discardSession(session);
+    void disconnectFtms();
     setRest(null);
     toast('Allenamento annullato', 'info');
     nav('/workouts', { replace: true });
