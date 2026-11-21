@@ -26,6 +26,10 @@
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Forma usa il Bluetooth per collegarsi alla cyclette, al tapis roulant e alle fasce cardio e leggere i dati dell'allenamento.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Forma usa la fotocamera per leggere i codici a barre degli alimenti e per le foto dei progressi.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

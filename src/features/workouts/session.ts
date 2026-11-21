@@ -1,7 +1,8 @@
 /** Gestione della sessione di allenamento: avvio, salvataggio continuo, ripresa e chiusura. */
 import { store } from '@/db/store';
 import type { CardioPlan, ExerciseLog, Profile, SetLog, WorkoutSession, WorkoutTemplate } from '@/lib/types';
-import { actualFromPlan, defaultPlanFor, isCardioId, logStateFor, pauseTimer, planFromLegacy, progressTemplateCardio, timerElapsedMs } from '@/lib/cardio';
+import { liveMachineSummary } from '@/lib/ble/ftms';
+import { actualFromPlan, applyMachineData, defaultPlanFor, isCardioId, logStateFor, pauseTimer, planFromLegacy, progressTemplateCardio, timerElapsedMs } from '@/lib/cardio';
 import { detectPRs, lastPerformance } from '@/lib/stats';
 import { uid } from '@/lib/util';
 import { getExercise } from '@/data/exercises';
@@ -79,9 +80,12 @@ export async function finishSession(s: WorkoutSession): Promise<WorkoutSession> 
     .map((e) => {
       if (!e.cardio) return { ...e, sets: e.sets.filter((x) => x.done || x.reps || x.weight) };
       if (e.cardio.done) return { ...e, cardio: { ...e.cardio, timer: pauseTimer(e.cardio.timer, now.getTime()) } };
+      // dati dell'attrezzo Bluetooth: quelli dal vivo se è ancora collegato, altrimenti l'ultimo riepilogo salvato
+      const machine = liveMachineSummary(e.uid) ?? e.cardio.machine ?? null;
       const sec = timerElapsedMs(e.cardio.timer, now.getTime()) / 1000;
-      if (sec < 60) return { ...e, cardio: { ...e.cardio, done: false } };
-      return { ...e, cardio: { ...e.cardio, timer: pauseTimer(e.cardio.timer, now.getTime()), done: true, actual: actualFromPlan(e.cardio.plan, sec, weightKg) } };
+      if (sec < 60 && !(machine && machine.movingSec >= 60)) return { ...e, cardio: { ...e.cardio, done: false } };
+      const actual = applyMachineData(actualFromPlan(e.cardio.plan, sec, weightKg), e.cardio.plan, machine, weightKg);
+      return { ...e, cardio: { ...e.cardio, machine, timer: pauseTimer(e.cardio.timer, now.getTime()), done: true, actual } };
     })
     .filter((e) => (e.cardio ? e.cardio.done && !!e.cardio.actual : e.sets.some((x) => x.done)));
   const ended: WorkoutSession = { ...s, exercises, status: 'completed', endedAt: now.toISOString(), pausedMs: s.pausedMs + paused, pausedAt: null };

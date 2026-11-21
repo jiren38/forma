@@ -7,7 +7,7 @@
  */
 import { getExercise, type Exercise } from '@/data/exercises';
 import type {
-  CardioActual, CardioIntensity, CardioLog, CardioLogState, CardioMachine, CardioPhase, CardioPlan, CardioTimer,
+  CardioActual, CardioIntensity, CardioLog, CardioLogState, CardioMachine, CardioMachineData, CardioPhase, CardioPlan, CardioTimer,
   Equipment, Profile, TemplateExercise, WorkoutSession, WorkoutTemplate,
 } from './types';
 import { addDays, clamp, dayKey, round, startOfWeek, sum, uid } from './util';
@@ -382,6 +382,27 @@ export function actualFromPlan(plan: CardioPlan, elapsedSec: number, weightKg: n
     durationSec, distanceKm, speedKmh: speed, inclinePct: weightedAvg(covered, 'inclinePct'), resistance: weightedAvg(covered, 'resistance'), rpm: weightedAvg(covered, 'rpm'),
     avgHr: null, kcal: estimateKcal(plan.machine, covered, weightKg), intensity: plan.intensity, completedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Sostituisce le stime con i dati letti dall'attrezzo Bluetooth (dove ci sono).
+ * La durata resta quella del timer dell'app; se il timer non è stato usato si prende
+ * il tempo in movimento misurato dall'attrezzo.
+ */
+export function applyMachineData(a: CardioActual, plan: CardioPlan, m: CardioMachineData | null | undefined, weightKg: number): CardioActual {
+  if (!m || (m.movingSec <= 0 && m.distanceM <= 0)) return a;
+  const info = MACHINE_INFO[plan.machine];
+  const out: CardioActual = { ...a, device: m.device };
+  if (out.durationSec < 60 && m.movingSec >= 60) out.durationSec = Math.round(m.movingSec);
+  if (m.distanceM > 0) out.distanceKm = round(m.distanceM / 1000, 2);
+  if (info.speed && m.avgSpeedKmh != null) out.speedKmh = round(m.avgSpeedKmh, 1);
+  if (info.incline && m.avgIncline != null) out.inclinePct = round(m.avgIncline, 1);
+  if (info.resistance && m.avgResistance != null) out.resistance = round(m.avgResistance, 1);
+  if (info.rpm && m.avgCadence != null) out.rpm = Math.round(m.avgCadence);
+  if (m.avgHr != null) out.avgHr = Math.round(m.avgHr);
+  if (m.kcal > 0) { out.kcal = Math.round(m.kcal); out.kcalFromMachine = true; }
+  else { out.kcal = estimateActualKcal(plan.machine, out, plan, weightKg); out.kcalFromMachine = false; }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
