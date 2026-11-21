@@ -1256,10 +1256,52 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 /* ---- Attrezzo Bluetooth collegato durante il cardio ---- */
 .machine-link { border-radius: var(--radius); padding: 12px; background: var(--surface-2); margin-top: 10px; }
 .machine-link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-.machine-link .dot.on { background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); }
-.machine-link .dot.lost { background: var(--orange); }
-.machine-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.machine-tiles .m { background: var(--surface); border-radius: var(--radius-sm); padding: 8px 10px; min-width: 0; }
-.machine-tiles .m .l { font-size: 11px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.machine-tiles .m .v { font-family: var(--font-display); font-weight: 800; font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.machine-tiles .m .v small { font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 2px; }
+.machine-link .dot.pulse { background: var(--c-cardio); animation: mp-pulse 1.2s ease-in-out infinite; }
+
+.machine-panel {
+  position: relative; margin-top: 12px; padding: 14px; border-radius: var(--radius-lg); overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--c-cardio) 16%, transparent), transparent 60%),
+    var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--c-cardio) 22%, var(--border));
+}
+.machine-panel.is-lost { border-color: color-mix(in srgb, var(--orange) 35%, var(--border)); }
+.mp-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mp-status { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 4px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; background: var(--surface-3); color: var(--text-2); }
+.mp-status .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.mp-status.on { color: var(--success); background: var(--success-soft); }
+.mp-status.moving { color: var(--success); background: var(--success-soft); }
+.mp-status.moving .dot { animation: mp-pulse 1.4s ease-in-out infinite; }
+.mp-status.lost { color: var(--orange); background: var(--orange-soft); }
+.mp-device { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.mp-device svg { flex: none; }
+@keyframes mp-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
+@media (prefers-reduced-motion: reduce) { .mp-status .dot, .machine-link .dot.pulse { animation: none; } }
+
+.mp-hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.mp-metric { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 12px; border-radius: var(--radius); background: var(--surface); --mc: var(--c-cardio); }
+.mp-metric.ok { --mc: var(--success); }
+.mp-metric.low, .mp-metric.high { --mc: var(--warning); }
+.mp-metric .l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mp-metric .v { font-family: var(--font-display); font-weight: 800; font-size: clamp(38px, 12vw, 52px); line-height: 1; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; margin-top: 4px; }
+.mp-metric .v small { font-family: var(--font); font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--text-2); margin-left: 4px; }
+.mp-metric .gauge { position: relative; height: 5px; border-radius: 99px; background: var(--surface-3); margin-top: 10px; }
+.mp-metric .gauge i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--mc); transition: width .4s var(--ease); }
+.mp-metric .gauge b { position: absolute; top: -3px; width: 2px; height: 11px; border-radius: 2px; background: var(--text); opacity: .7; transform: translateX(-1px); }
+.mp-metric .t { font-size: 11.5px; font-weight: 600; color: var(--mc); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-metric .t.muted { color: var(--muted); font-weight: 500; }
+
+.mp-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; padding: 10px 0 2px; border-top: 1px solid var(--border); }
+.mp-totals > div { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.mp-totals > div + div { border-left: 1px solid var(--border); }
+.mp-totals .v { font-family: var(--font-display); font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.mp-totals .v small { font-family: var(--font); font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 2px; }
+.mp-totals .l { font-size: 11px; color: var(--muted); }
+
+.mp-extras { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mp-extras > span { font-size: 12px; padding: 5px 9px; border-radius: 999px; background: var(--surface); font-variant-numeric: tabular-nums; }
+.mp-banner { margin-top: 10px; align-items: center; }
+.mp-warn { color: var(--warning); margin-top: 8px; }
+@media (max-width: 350px) { .mp-metric { padding: 10px; } .mp-totals .v { font-size: 18px; } }

@@ -121,6 +121,8 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
           <div style={{ marginTop: 8 }}><Bar value={Math.min(elapsedSec, total)} max={Math.max(1, total)} color="var(--blue)" /></div>
           {pos.finished && started && <div className="banner" style={{ marginTop: 8 }}><CheckCircle2 size={18} /><span>Durata prevista raggiunta. Puoi continuare o premere <b>Termina</b> per registrare i valori.</span></div>}
 
+          {FTMS_MACHINES.includes(plan.machine) && <MachineLink uid={ex.uid} c={c} onStartTimer={onStart} canStart={!sessionPaused} target={pos.phase ?? plan} />}
+
           {plan.mode === 'intervals' ? (
             <>
               {!pos.finished && (
@@ -158,7 +160,6 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
             <button className="btn grow" onClick={openResult}><Square size={15} /> {started ? 'Termina' : 'Registra senza timer'}</button>
           </div>
           {sessionPaused && <p className="tiny muted" style={{ marginTop: 6 }}>Allenamento in pausa: riprendilo per avviare il timer.</p>}
-          {FTMS_MACHINES.includes(plan.machine) && <MachineLink uid={ex.uid} c={c} onStartTimer={onStart} canStart={!sessionPaused} />}
         </>
       )}
 
