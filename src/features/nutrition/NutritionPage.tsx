@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Copy, Save, BookOpen, CalendarRange, ShoppingCart, Target, Apple, Info, Bookmark, Trash2, ScanBarcode, History, Flame, Search, Coffee, Sun, Cookie, Moon, Utensils } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Copy, Save, BookOpen, CalendarRange, ShoppingCart, Target, Apple, Info, Bookmark, Trash2, ScanBarcode, Package, Flame, Search, Coffee, Sun, Cookie, Moon, Utensils } from 'lucide-react';
 import { unlockAudio } from './scanner/feedback';
+import { useCatalog } from './catalog';
 import { useActiveProgram, useDiary, useProfile, useSavedMeals, useSettings } from '@/app/data';
 import { store } from '@/db/store';
 import { targetsFor, nutritionTrend } from '@/lib/insights';
@@ -29,6 +30,7 @@ export default function NutritionPage() {
   const program = useActiveProgram();
   const diary = useDiary();
   const saved = useSavedMeals();
+  const { catalog } = useCatalog();
   const t = targetsFor(profile, settings, program);
   const day = useMemo(() => diary.filter((d) => d.date === date).sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [diary, date]);
   const tot = totals(day);
@@ -66,11 +68,17 @@ export default function NutritionPage() {
   return (
     <div className="page stack">
       <SectionHero section="nutrition" compact title="Nutrizione" desc="Diario, calorie e macronutrienti. Scansiona un prodotto o cerca un alimento."
-        right={<><Link to={`/nutrition/scanned${isToday ? '' : `?date=${date}`}`} className="icon-btn" aria-label="Diario prodotti"><History size={19} /></Link><Link to="/nutrition/targets" className="icon-btn" aria-label="Obiettivi nutrizionali"><Target size={19} /></Link></>}
+        right={<><Link to={`/nutrition/foods${isToday ? '' : `?date=${date}`}`} className="icon-btn" aria-label="I miei prodotti"><Package size={19} /></Link><Link to="/nutrition/targets" className="icon-btn" aria-label="Obiettivi nutrizionali"><Target size={19} /></Link></>}
         actions={<>
           <button className="btn primary" onClick={() => { unlockAudio(); nav(`/nutrition/scan${isToday ? '' : `?date=${date}`}`); }}><ScanBarcode size={19} /> Scansiona</button>
           <Link to={`/nutrition/add?date=${date}`} className="btn"><Search size={17} /> Cerca alimento</Link>
         </>} />
+
+      <Link to={`/nutrition/foods${isToday ? '' : `?date=${date}`}`} className="card catalog-link" style={{ ['--sc' as string]: 'var(--c-nutrition)' } as React.CSSProperties} aria-label="Apri i miei prodotti">
+        <span className="t-ic"><Package size={20} /></span>
+        <span className="grow" style={{ minWidth: 0 }}><b>I miei prodotti</b><div className="tiny muted ellipsis">{catalog.length ? `${catalog.length} ${catalog.length === 1 ? 'salvato' : 'salvati'} · aggiungi scansionando o cercando` : 'Salva prodotti senza aggiungerli ai pasti'}</div></span>
+        <ChevronRight size={18} className="muted" />
+      </Link>
 
       <div className="date-nav">
         <button className="icon-btn ghost" onClick={() => setDate(dayKey(addDays(fromKey(date), -1)))} aria-label="Giorno precedente"><ChevronLeft size={20} /></button>
@@ -138,7 +146,7 @@ export default function NutritionPage() {
             <Link to="/nutrition/recipes" className="tool"><span className="t-ic"><BookOpen size={20} /></span><b>Ricette</b><span>Crea piatti e calcola i valori</span></Link>
             <Link to="/nutrition/plan" className="tool"><span className="t-ic"><CalendarRange size={20} /></span><b>Piano pasti</b><span>Organizza la settimana</span></Link>
             <Link to="/nutrition/shopping" className="tool"><span className="t-ic"><ShoppingCart size={20} /></span><b>Lista della spesa</b><span>Dal piano pasti</span></Link>
-            <Link to="/nutrition/foods" className="tool"><span className="t-ic"><Apple size={20} /></span><b>I miei alimenti</b><span>Personalizzati e preferiti</span></Link>
+            <Link to="/nutrition/foods" className="tool"><span className="t-ic"><Package size={20} /></span><b>I miei prodotti</b><span>Scansiona, cerca, salva</span></Link>
           </div>
           <section className="card">
             <div className="card-title"><h3>Ultimi 7 giorni</h3><span className="tiny muted">kcal</span></div>

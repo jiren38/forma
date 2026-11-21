@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Plus, Trash2, Check, ChevronLeft, ChevronRight, Share2, ScanBarcode, BookmarkCheck } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Check, ChevronLeft, ChevronRight, Share2, ScanBarcode, BookmarkCheck, Search } from 'lucide-react';
 import { useCustomFoods, useMealPlans, useMeta, patchMeta } from '@/app/data';
 import { store } from '@/db/store';
 import { addDays, dayKey, fmtN, fromKey, startOfWeek, uid } from '@/lib/util';
@@ -79,10 +79,11 @@ export default function ShoppingList() {
       </form>
       <div className="shop-tools">
         <button className="btn primary" onClick={() => { unlockAudio(); nav('/nutrition/scan?to=shopping'); }}><ScanBarcode size={18} /> Scansiona</button>
-        <Link className="btn" to="/nutrition/scanned?to=shopping"><BookmarkCheck size={18} /> Diario prodotti</Link>
+        <Link className="btn" to="/nutrition/foods?to=shopping"><BookmarkCheck size={18} /> I miei prodotti</Link>
+        <Link className="btn" to="/nutrition/foods/add?to=shopping"><Search size={18} /> Cerca</Link>
       </div>
       {total === 0 ? (
-        <Empty icon={<ShoppingCart />} title="Lista vuota" text="La lista si genera dal piano pasti della settimana (ingredienti delle ricette inclusi). Puoi anche scansionare un prodotto o prenderlo dal diario prodotti." action={<Link to="/nutrition/plan" className="btn primary">Apri il piano pasti</Link>} />
+        <Empty icon={<ShoppingCart />} title="Lista vuota" text="La lista si genera dal piano pasti della settimana (ingredienti delle ricette inclusi). Puoi anche scansionare un prodotto o prenderlo dai tuoi prodotti." action={<Link to="/nutrition/plan" className="btn primary">Apri il piano pasti</Link>} />
       ) : (
         <>
           {items.map(([cat, list]) => (
