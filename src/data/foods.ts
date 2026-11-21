@@ -3,6 +3,7 @@
  * Formato compatto: [id, nome, kcal, proteine, carboidrati, grassi, categoria, gPorzione?, nomePorzione?]
  */
 import type { Food } from '@/lib/types';
+import { EXTRA } from './foods-extra';
 
 type Row = [string, string, number, number, number, number, string, number?, string?];
 
@@ -237,8 +238,13 @@ const R: Row[] = [
   ['pancake', 'Pancake', 227, 6.4, 28, 10, 'Dolci', 40, 'pancake'],
 ];
 
-export const FOODS: Food[] = R.map(([id, name, kcal, protein, carbs, fat, category, unitGrams, unitName]) => ({
+const BASE: Food[] = R.map(([id, name, kcal, protein, carbs, fat, category, unitGrams, unitName]) => ({
   id: `db_${id}`, name, kcal, protein, carbs, fat, category, unitGrams, unitName, source: 'db',
 }));
+const EXTENDED: Food[] = EXTRA.map(([id, name, kcal, protein, carbs, fat, category, unitGrams, unitName, keywords]) => ({
+  id: `db_${id}`, name, kcal, protein, carbs, fat, category, unitGrams, unitName, keywords: keywords || undefined, source: 'db',
+}));
+
+export const FOODS: Food[] = [...BASE, ...EXTENDED];
 
 export const FOOD_CATEGORIES = Array.from(new Set(FOODS.map((f) => f.category!)));

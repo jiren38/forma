@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Globe, Heart, Clock, BookOpen, Bookmark, PenLine, Search, Loader2, ScanBarcode, BookmarkCheck } from 'lucide-react';
 import { useCustomFoods, useMeta, useRecipes, useSavedMeals } from '@/app/data';
@@ -10,7 +10,7 @@ import { PageHeader, SearchInput, Empty, Sheet, NumberInput, Stepper, useToast, 
 import { MacroLine, QuantitySheet, addRecipeEntry, allFoods, defaultSlot, findFood, recipePer100, searchFoods } from './common';
 import type { DiaryEntry, Food, MealSlot, Recipe } from '@/lib/types';
 import { canonicalCode } from '@/lib/barcode';
-import { OFF_FIELDS, parseOffProduct } from '@/lib/off';
+import { searchOffProducts } from '@/lib/off-search';
 import { saveOnlineProduct } from './products';
 import { unlockAudio } from './scanner/feedback';
 
@@ -41,31 +41,34 @@ export default function AddFood() {
   const favs = meta.favoriteFoods.map(findFood).filter((f): f is Food => !!f);
   const catalog = useMemo(() => custom.filter((f) => f.savedAt).sort((a, b) => a.name.localeCompare(b.name, 'it')), [custom]);
 
-  async function searchOnline() {
+  const offTerm = useRef('');
+  async function searchOnline(auto = false) {
     const term = q.trim();
     if (term.length < 2) return;
     // un codice a barre apre la scheda prodotto (ricerca su Open Food Facts con cache)
-    if (/^\d{8,14}$/.test(term)) { nav(`/nutrition/product/${canonicalCode(term)}?date=${date}&slot=${slot}`); return; }
+    if (/^\d{8,14}$/.test(term)) { if (!auto) nav(`/nutrition/product/${canonicalCode(term)}?date=${date}&slot=${slot}`); return; }
+    if (offTerm.current === term && off && !off.error) return;
+    offTerm.current = term;
     setOff({ loading: true, results: [] });
-    try {
-      const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(term)}&search_simple=1&action=process&json=1&page_size=25&lc=it&fields=${OFF_FIELDS}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const products: any[] = data.products ?? [];
-      const out: Food[] = products
-        .map((p) => (p?.code ? parseOffProduct(p, canonicalCode(String(p.code))) : null))
-        .filter((x): x is Food => !!x && !(x.missing ?? []).includes('kcal'));
-      setOff({ loading: false, results: out });
-    } catch {
-      setOff({ loading: false, results: [], error: 'Ricerca online non disponibile (sei offline o il servizio non risponde). Puoi creare l’alimento manualmente.' });
-    }
+    const r = await searchOffProducts(term);
+    if (offTerm.current !== term) return; // nel frattempo l'utente ha cambiato ricerca
+    if (r.status === 'ok') setOff({ loading: false, results: r.foods.slice(0, 30) });
+    else setOff({ loading: false, results: [], error: auto && r.kind === 'throttled' ? undefined : r.message });
   }
+  // ricerca online automatica quando si smette di scrivere (con limite di frequenza in off-search)
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 3 || /^\d+$/.test(term)) return;
+    const t = setTimeout(() => { void searchOnline(true); }, 1100);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
 
   async function pickOnline(f: Food) {
-    // salvato tra i propri prodotti (un documento per codice) e aperto nella scheda prodotto
-    const saved = await saveOnlineProduct(f);
-    nav(`/nutrition/product/${saved.barcode}?date=${date}&slot=${slot}`);
+    // con i valori: salvato tra i propri prodotti (un documento per codice) e aperto nella scheda;
+    // senza calorie nei risultati: la scheda scarica il prodotto completo
+    if (!(f.missing ?? []).includes('kcal')) await saveOnlineProduct(f);
+    nav(`/nutrition/product/${f.barcode}?date=${date}&slot=${slot}`);
   }
   /** Gli alimenti con codice a barre si aprono nella scheda prodotto (porzioni, ml, dati mancanti). */
   const pick = (f: Food) => (f.barcode ? nav(`/nutrition/product/${f.barcode}?date=${date}&slot=${slot}`) : setSel(f));
@@ -80,7 +83,7 @@ export default function AddFood() {
         <span className="pill">{date === dayKey() ? 'Oggi' : fromKey(date).toLocaleDateString('it-IT')}</span>
       </div>
       <div className="row search-scan" style={{ gap: 8 }}>
-        <div className="grow"><SearchInput value={q} onChange={(v) => { setQ(v); setTab('search'); setOff(null); }} placeholder="Cerca alimento o codice a barre" autoFocus /></div>
+        <div className="grow"><SearchInput value={q} onChange={(v) => { setQ(v); setTab('search'); setOff(null); offTerm.current = ''; }} placeholder="Cerca alimento o codice a barre" autoFocus /></div>
         <button className="icon-btn scan-icon" onClick={() => { unlockAudio(); nav(`/nutrition/scan?date=${date}&slot=${slot}`); }} aria-label="Scansiona il codice a barre" title="Scansiona il codice a barre"><ScanBarcode size={21} /></button>
       </div>
       <Chips>
@@ -101,13 +104,16 @@ export default function AddFood() {
           {results.length === 0 && !q ? null : results.length === 0 ? <p className="small muted">Nessun alimento nel database locale per “{q}”.</p> : <FoodList foods={results} onPick={pick} />}
           {q.trim().length >= 2 && (
             <div className="card stack-sm">
-              <div className="row-between"><span className="small"><b>Non trovi l’alimento?</b><div className="tiny muted">Cerca tra i prodotti confezionati di Open Food Facts (database aperto). Per i codici a barre inserisci le cifre.</div></span></div>
-              <button className="btn" onClick={searchOnline} disabled={off?.loading}>{off?.loading ? <><Loader2 size={16} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Ricerca…</> : <>{/^\d{8,14}$/.test(q.trim()) ? <ScanBarcode size={16} /> : <Globe size={16} />} Cerca online</>}</button>
+              <div className="row-between"><span className="small"><b>Prodotti confezionati online</b><div className="tiny muted">Da Open Food Facts, database aperto con milioni di prodotti dei supermercati. Per i codici a barre inserisci le cifre.</div></span></div>
+              {off?.loading && <p className="small muted row" style={{ gap: 6 }}><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Cerco “{q.trim()}” online…</p>}
               {off?.error && <p className="small danger-text">{off.error}</p>}
-              {off && !off.loading && !off.error && (off.results.length ? <FoodList foods={off.results} onPick={pickOnline} /> : <p className="small muted">Nessun prodotto trovato online.</p>)}
+              {off && !off.loading && !off.error && (off.results.length ? <FoodList foods={off.results} onPick={pickOnline} /> : <p className="small muted">Nessun prodotto trovato online per “{q.trim()}”.</p>)}
+              {(!off || off.error || /^\d{8,14}$/.test(q.trim())) && !off?.loading && (
+                <button className="btn" onClick={() => { offTerm.current = ''; void searchOnline(); }}>{/^\d{8,14}$/.test(q.trim()) ? <ScanBarcode size={16} /> : <Globe size={16} />} {off?.error ? 'Riprova la ricerca online' : 'Cerca online'}</button>
+              )}
             </div>
           )}
-          {!q && <p className="small muted">Cerca tra oltre {foods.length} alimenti con valori medi per 100 g, oppure usa recenti e preferiti.</p>}
+          {!q && <p className="small muted">Cerca tra oltre {foods.length} alimenti (anche piatti pronti, pizze, panini, rosticceria e bar) con valori medi per 100 g, oppure usa recenti e preferiti. Se scrivi, cerchiamo anche tra i prodotti dei supermercati online.</p>}
         </>
       )}
       {tab === 'recent' && (recent.length ? <FoodList foods={recent} onPick={pick} /> : <Empty icon={<Clock />} title="Nessun alimento recente" />)}
@@ -158,7 +164,7 @@ function FoodList({ foods, onPick }: { foods: Food[]; onPick: (f: Food) => void 
         <button key={f.id} className="list-item" onClick={() => onPick(f)}>
           <span className="grow" style={{ minWidth: 0 }}>
             <div className="li-title ellipsis">{f.name}{f.custom && f.source !== 'openfoodfacts' ? <span className="pill" style={{ marginLeft: 6 }}>Mio</span> : null}</div>
-            <div className="li-sub ellipsis">{f.brand ? `${f.brand} · ` : ''}{f.kcal} kcal/100 {f.unit ?? 'g'} · P {f.protein} · C {f.carbs} · G {f.fat}{f.unitGrams ? ` · 1 ${f.unitName ?? 'porz.'} = ${f.unitGrams} g` : ''}</div>
+            <div className="li-sub ellipsis">{f.brand ? `${f.brand} · ` : ''}{(f.missing ?? []).includes('kcal') ? 'Valori nutrizionali nella scheda' : <>{f.kcal} kcal/100 {f.unit ?? 'g'} · P {f.protein} · C {f.carbs} · G {f.fat}{f.unitGrams ? ` · 1 ${f.unitName ?? 'porz.'} = ${f.unitGrams} g` : ''}</>}</div>
           </span>
           <Plus size={18} className="muted" />
         </button>
