@@ -3,15 +3,19 @@
  * via Bluetooth e mostra i dati dal vivo. SOLO LETTURA: l'app non comanda l'attrezzo.
  */
 import { useState } from 'react';
-import { Bluetooth, BluetoothOff, RefreshCw, Unplug } from 'lucide-react';
+import { Bluetooth, BluetoothOff, Play, RefreshCw, Unplug } from 'lucide-react';
 import { connectFtms, disconnectFtms, ftmsSupported, moveFtmsTo, reconnectFtms, useFtms } from '@/lib/ble/ftms';
 import { formatClock, fmtN } from '@/lib/util';
-import type { CardioLogState, CardioMachine } from '@/lib/types';
+import type { CardioLogState, CardioMachine, CardioPhase } from '@/lib/types';
 
 /** Macchine che possono inviare dati FTMS. */
 export const FTMS_MACHINES: CardioMachine[] = ['bike', 'treadmill'];
 
-export function MachineLink({ uid, c, onStartTimer, canStart }: { uid: string; c: CardioLogState; onStartTimer: () => void; canStart: boolean }) {
+export function MachineLink({ uid, c, onStartTimer, canStart, target }: {
+  uid: string; c: CardioLogState; onStartTimer: () => void; canStart: boolean;
+  /** valori previsti nella fase in corso (o nel piano continuo) */
+  target?: Pick<CardioPhase, 'speedKmh' | 'inclinePct' | 'resistance' | 'rpm'> | null;
+}) {
   const s = useFtms();
   const [busy, setBusy] = useState(false);
   const mine = s.ownerUid === uid;
@@ -60,51 +64,109 @@ export function MachineLink({ uid, c, onStartTimer, canStart }: { uid: string; c
   }
 
   if (s.status === 'connecting') {
-    return <div className="machine-link small text-2 row" style={{ gap: 8 }}><span className="dot" /> Collegamento a {s.device ?? 'l’attrezzo'}…</div>;
+    return <div className="machine-link small text-2 row" style={{ gap: 8 }}><span className="dot pulse" /> Collegamento in corso…</div>;
   }
 
   const L = s.live;
   const sum = s.summary;
+  const kind = s.kind ?? (c.plan.machine === 'bike' ? 'bike' : 'treadmill');
   const wrong = s.kind && s.kind !== c.plan.machine;
-  const tiles: [string, string, string?][] = [];
-  if (L.speedKmh != null) tiles.push(['Velocità', fmtN(L.speedKmh, 1), 'km/h']);
-  tiles.push(['Distanza', sum ? (sum.distanceM >= 1000 ? fmtN(sum.distanceM / 1000, 2) : fmtN(sum.distanceM)) : '0', sum && sum.distanceM >= 1000 ? 'km' : 'm']);
-  tiles.push(['In movimento', formatClock(sum?.movingSec ?? 0)]);
-  tiles.push(['Calorie', fmtN(sum?.kcal ?? 0), 'kcal']);
-  if (s.kind === 'bike') {
-    if (L.cadence != null) tiles.push(['Cadenza', fmtN(L.cadence), 'rpm']);
-    if (L.resistance != null) tiles.push(['Resistenza', fmtN(L.resistance, 1)]);
-  } else if (L.inclinePct != null) tiles.push(['Inclinazione', fmtN(L.inclinePct, 1), '%']);
-  if (L.power != null && L.power > 0) tiles.push(['Potenza', fmtN(L.power), 'W']);
-  if (L.hr != null) tiles.push(['Frequenza cardiaca', fmtN(L.hr), 'bpm']);
-  if (L.machineElapsedSec != null) tiles.push(['Sul display', formatClock(L.machineElapsedSec)]);
+  const live = s.status === 'connected';
+  const dist = sum?.distanceM ?? 0;
+
+  // i due dati principali, con il confronto con l'obiettivo della fase in corso
+  const heroes: Hero[] = kind === 'bike'
+    ? [
+        { label: 'Cadenza', value: L.cadence, digits: 0, unit: 'rpm', target: target?.rpm, tol: 0.1 },
+        { label: 'Resistenza', value: L.resistance, digits: 0, unit: c.plan.resistanceMax ? `/ ${c.plan.resistanceMax}` : 'livello', target: target?.resistance, tol: 0 },
+      ]
+    : [
+        { label: 'Velocità', value: L.speedKmh, digits: 1, unit: 'km/h', target: target?.speedKmh, tol: 0.05 },
+        { label: 'Inclinazione', value: L.inclinePct, digits: 1, unit: '%', target: target?.inclinePct, tol: 0 },
+      ];
+
+  const totals: [string, string, string?][] = [
+    ['Distanza', dist >= 1000 ? fmtN(dist / 1000, 2) : fmtN(dist), dist >= 1000 ? 'km' : 'm'],
+    ['Calorie', fmtN(sum?.kcal ?? 0), 'kcal'],
+    ['In movimento', formatClock(sum?.movingSec ?? 0)],
+  ];
+
+  const extras: [string, string][] = [];
+  if (kind === 'bike' && L.speedKmh != null) extras.push(['Velocità', `${fmtN(L.speedKmh, 1)} km/h`]);
+  if (L.power != null && L.power > 0) extras.push(['Potenza', `${fmtN(L.power)} W`]);
+  if (L.hr != null) extras.push(['FC', `${fmtN(L.hr)} bpm`]);
+  if (sum?.avgSpeedKmh != null && kind === 'treadmill') extras.push(['Media', `${fmtN(sum.avgSpeedKmh, 1)} km/h`]);
+  if (sum?.avgCadence != null && kind === 'bike') extras.push(['Media', `${fmtN(sum.avgCadence)} rpm`]);
+  if (L.machineElapsedSec != null) extras.push(['Display', formatClock(L.machineElapsedSec)]);
 
   return (
-    <div className="machine-link" aria-live="off">
-      <div className="row-between" style={{ gap: 8 }}>
-        <span className="row small" style={{ gap: 8, minWidth: 0 }}>
-          <span className={`dot ${s.status === 'connected' ? 'on' : 'lost'}`} aria-hidden />
-          <span className="ellipsis"><b>{s.device}</b> {s.status === 'connected' ? (s.moving ? '· in movimento' : '· fermo') : '· connessione persa'}</span>
+    <div className={`machine-panel ${live ? '' : 'is-lost'}`}>
+      <div className="mp-head">
+        <span className={`mp-status ${live ? (s.moving ? 'moving' : 'on') : 'lost'}`}>
+          <span className="dot" aria-hidden />
+          {live ? (s.moving ? 'Dal vivo' : 'Collegato') : 'Connessione persa'}
         </span>
-        <button className="icon-btn ghost" onClick={() => void disconnectFtms()} aria-label="Scollega l’attrezzo" title="Scollega"><Unplug size={17} /></button>
+        <span className="mp-device ellipsis"><Bluetooth size={12} /> {s.device}</span>
+        <button className="icon-btn ghost sm" onClick={() => void disconnectFtms()} aria-label="Scollega l’attrezzo" title="Scollega"><Unplug size={16} /></button>
       </div>
+
       {s.status === 'lost' && (
-        <div className="banner warn" style={{ marginTop: 8 }}>
-          <span className="grow">Connessione persa. I dati raccolti finora restano salvati.</span>
+        <div className="banner warn mp-banner">
+          <span className="grow">I dati raccolti finora restano salvati.</span>
           <button className="btn sm" onClick={reconnect} disabled={busy}><RefreshCw size={14} /> Ricollega</button>
         </div>
       )}
-      {wrong && <p className="tiny" style={{ color: 'var(--warning)', marginTop: 6 }}>Questo attrezzo sembra {s.kind === 'bike' ? 'una cyclette' : 'un tapis roulant'}, ma l’attività è {c.plan.machine === 'bike' ? 'cyclette' : 'tapis roulant'}: controlla di aver scelto quello giusto.</p>}
-      <div className="machine-tiles">
-        {tiles.map(([l, v, u]) => <div className="m" key={l}><span className="l">{l}</span><span className="v">{v}{u && <small>{u}</small>}</span></div>)}
+      {wrong && <p className="tiny mp-warn">Questo attrezzo sembra {s.kind === 'bike' ? 'una cyclette' : 'un tapis roulant'}, ma l’attività è {c.plan.machine === 'bike' ? 'cyclette' : 'tapis roulant'}: controlla di aver scelto quello giusto.</p>}
+
+      <div className="mp-hero">
+        {heroes.map((h) => <HeroMetric key={h.label} h={h} />)}
       </div>
-      {s.status === 'connected' && s.moving && !c.timer.running && !c.done && (
-        <div className="banner" style={{ marginTop: 8 }}>
-          <span className="grow">L’attrezzo è in movimento ma il timer è fermo.</span>
-          <button className="btn sm primary" onClick={onStartTimer} disabled={!canStart}>Avvia timer</button>
+
+      <div className="mp-totals">
+        {totals.map(([l, v, u]) => (
+          <div key={l}><span className="v">{v}{u && <small>{u}</small>}</span><span className="l">{l}</span></div>
+        ))}
+      </div>
+
+      {extras.length > 0 && (
+        <div className="mp-extras">
+          {extras.map(([l, v]) => <span key={l}><span className="muted">{l}</span> <b>{v}</b></span>)}
         </div>
       )}
-      <p className="tiny muted" style={{ marginTop: 6 }}>Distanza e calorie contano da quando hai collegato l’attrezzo. A fine attività vengono salvate nello storico.</p>
+
+      {live && s.moving && !c.timer.running && !c.done && (
+        <div className="banner mp-banner">
+          <span className="grow">Ti stai allenando ma il timer è fermo.</span>
+          <button className="btn sm primary" onClick={onStartTimer} disabled={!canStart}><Play size={14} fill="currentColor" /> Avvia timer</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Hero = { label: string; value?: number; digits: number; unit: string; target?: number | null; tol: number };
+
+/** Dato principale: numero grande e confronto con l'obiettivo (in linea, sotto, sopra). */
+function HeroMetric({ h }: { h: Hero }) {
+  const has = h.value != null;
+  let state: 'ok' | 'low' | 'high' | '' = '';
+  if (has && h.target != null && h.target > 0) {
+    const margin = Math.max(h.tol * h.target, h.digits ? 0.05 : 0.5);
+    state = h.value! < h.target - margin ? 'low' : h.value! > h.target + margin ? 'high' : 'ok';
+  }
+  const pct = has && h.target ? Math.max(0, Math.min(1, h.value! / (h.target * 1.5))) : 0;
+  return (
+    <div className={`mp-metric ${state}`}>
+      <span className="l">{h.label}</span>
+      <span className="v">{has ? fmtN(h.value!, h.digits) : '–'}<small>{h.unit}</small></span>
+      {h.target != null && h.target > 0 ? (
+        <>
+          <span className="gauge" aria-hidden><i style={{ width: `${pct * 100}%` }} /><b style={{ left: `${(1 / 1.5) * 100}%` }} /></span>
+          <span className="t">
+            Obiettivo {fmtN(h.target, h.digits)}{state === 'ok' ? ' · in linea' : state === 'low' ? ' · aumenta' : state === 'high' ? ' · riduci' : ''}
+          </span>
+        </>
+      ) : <span className="t muted">Nessun obiettivo</span>}
     </div>
   );
 }
