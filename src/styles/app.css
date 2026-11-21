@@ -1248,7 +1248,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .product-actions .btn { min-width: 0; white-space: normal; line-height: 1.2; text-align: center; padding-inline: 10px; }
 @media (max-width: 359px) { .product-actions { grid-template-columns: minmax(0, 1fr); } }
 .product-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.shop-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.shop-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.shop-tools .btn { padding-left: 8px; padding-right: 8px; font-size: 13.5px; }
 .shop-tools .btn { min-width: 0; }
 .shop-item-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .icon-btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
@@ -1305,3 +1306,16 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .mp-banner { margin-top: 10px; align-items: center; }
 .mp-warn { color: var(--warning); margin-top: 8px; }
 @media (max-width: 350px) { .mp-metric { padding: 10px; } .mp-totals .v { font-size: 18px; } }
+
+/* I miei prodotti: aggiunta al catalogo */
+.catalog-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.catalog-add-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); color: var(--text); font: inherit; text-align: center; cursor: pointer; transition: transform var(--dur-fast), border-color var(--dur); }
+.catalog-add-btn:active { transform: scale(.97); }
+.catalog-add-btn svg { color: var(--c-nutrition); margin-bottom: 2px; }
+.catalog-add-btn b { font-size: 14px; }
+.catalog-add-btn span { font-size: 11px; color: var(--muted); line-height: 1.25; }
+.catalog-add-btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: var(--shadow-glow); }
+.catalog-add-btn.primary svg, .catalog-add-btn.primary span { color: inherit; }
+.catalog-add-btn.primary span { opacity: .8; }
+a.card.catalog-link { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 12px 14px; }
+.catalog-link .t-ic { flex-shrink: 0; }

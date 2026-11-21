@@ -13,6 +13,7 @@ import { canonicalCode } from '@/lib/barcode';
 import { searchOffProducts } from '@/lib/off-search';
 import { saveOnlineProduct } from './products';
 import { unlockAudio } from './scanner/feedback';
+import { useCatalog } from './catalog';
 
 type Tab = 'search' | 'recent' | 'fav' | 'products' | 'meals' | 'recipes';
 
@@ -39,7 +40,7 @@ export default function AddFood() {
   const results = useMemo(() => searchFoods(foods, q).slice(0, 80), [foods, q]);
   const recent = meta.recentFoods.map(findFood).filter((f): f is Food => !!f);
   const favs = meta.favoriteFoods.map(findFood).filter((f): f is Food => !!f);
-  const catalog = useMemo(() => custom.filter((f) => f.savedAt).sort((a, b) => a.name.localeCompare(b.name, 'it')), [custom]);
+  const { catalog } = useCatalog();
 
   const offTerm = useRef('');
   async function searchOnline(auto = false) {
@@ -90,7 +91,7 @@ export default function AddFood() {
         <button className={`chip ${tab === 'search' ? 'on' : ''}`} onClick={() => setTab('search')}><Search size={13} /> Database</button>
         <button className={`chip ${tab === 'recent' ? 'on' : ''}`} onClick={() => setTab('recent')}><Clock size={13} /> Recenti</button>
         <button className={`chip ${tab === 'fav' ? 'on' : ''}`} onClick={() => setTab('fav')}><Heart size={13} /> Preferiti</button>
-        <button className={`chip ${tab === 'products' ? 'on' : ''}`} onClick={() => setTab('products')}><BookmarkCheck size={13} /> Diario prodotti</button>
+        <button className={`chip ${tab === 'products' ? 'on' : ''}`} onClick={() => setTab('products')}><BookmarkCheck size={13} /> I miei prodotti</button>
         <button className={`chip ${tab === 'meals' ? 'on' : ''}`} onClick={() => setTab('meals')}><Bookmark size={13} /> Pasti salvati</button>
         <button className={`chip ${tab === 'recipes' ? 'on' : ''}`} onClick={() => setTab('recipes')}><BookOpen size={13} /> Ricette</button>
       </Chips>
@@ -118,7 +119,7 @@ export default function AddFood() {
       )}
       {tab === 'recent' && (recent.length ? <FoodList foods={recent} onPick={pick} /> : <Empty icon={<Clock />} title="Nessun alimento recente" />)}
       {tab === 'fav' && (favs.length ? <FoodList foods={favs} onPick={pick} /> : <Empty icon={<Heart />} title="Nessun preferito" text="Quando aggiungi un alimento puoi segnarlo come preferito." />)}
-      {tab === 'products' && (catalog.length ? <FoodList foods={catalog} onPick={pick} /> : <Empty icon={<BookmarkCheck />} title="Diario prodotti vuoto" text="Dopo una scansione scegli “Salva nel diario prodotti” per ritrovare qui il prodotto." />)}
+      {tab === 'products' && (catalog.length ? <FoodList foods={catalog} onPick={pick} /> : <Empty icon={<BookmarkCheck />} title="Nessun prodotto salvato" text="Apri “I miei prodotti” per scansionare o cercare prodotti e salvarli qui senza aggiungerli a un pasto." action={<Link to="/nutrition/foods" className="btn sm">Apri I miei prodotti</Link>} />)}
       {tab === 'meals' && (saved.length ? (
         <div className="settings-group">
           {saved.map((m) => (

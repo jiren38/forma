@@ -28,10 +28,10 @@ const RecipesPage = lazy(() => import('@/features/nutrition/RecipesPage'));
 const MealPlanPage = lazy(() => import('@/features/nutrition/MealPlanPage'));
 const ShoppingList = lazy(() => import('@/features/nutrition/ShoppingList'));
 const TargetsPage = lazy(() => import('@/features/nutrition/TargetsPage'));
-const MyFoodsPage = lazy(() => import('@/features/nutrition/MyFoodsPage'));
+const ProductsPage = lazy(() => import('@/features/nutrition/ProductsPage'));
+const CatalogAddPage = lazy(() => import('@/features/nutrition/CatalogAddPage'));
 const ScannerPage = lazy(() => import('@/features/nutrition/ScannerPage'));
 const ProductPage = lazy(() => import('@/features/nutrition/ProductPage'));
-const ScannedProducts = lazy(() => import('@/features/nutrition/ScannedProducts'));
 const EnergyPage = lazy(() => import('@/features/energy/EnergyPage'));
 const BodyPage = lazy(() => import('@/features/body/BodyPage'));
 const CardioPage = lazy(() => import('@/features/cardio/CardioPage'));
@@ -86,10 +86,11 @@ function Shell() {
             <Route path="/nutrition/plan" element={<MealPlanPage />} />
             <Route path="/nutrition/shopping" element={<ShoppingList />} />
             <Route path="/nutrition/targets" element={<TargetsPage />} />
-            <Route path="/nutrition/foods" element={<MyFoodsPage />} />
+            <Route path="/nutrition/foods" element={<ProductsPage />} />
+            <Route path="/nutrition/foods/add" element={<CatalogAddPage />} />
             <Route path="/nutrition/scan" element={<ScannerPage />} />
             <Route path="/nutrition/product/:code" element={<ProductPage />} />
-            <Route path="/nutrition/scanned" element={<ScannedProducts />} />
+            <Route path="/nutrition/scanned" element={<ProductsPage />} />
             <Route path="/energy" element={<EnergyPage />} />
             <Route path="/body" element={<BodyPage />} />
             <Route path="/cardio" element={<CardioPage />} />

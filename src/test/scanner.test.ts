@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { canonicalCode, gtinCheckDigit, isValidGtin, lookupVariants, manualCodeProblem, upcEtoUpcA } from '@/lib/barcode';
 import { parseOffProduct, parseQuantity, fetchOffProduct } from '@/lib/off';
-import { per100Of, scaleNutrients, portionOptions, lookupProduct, addProductToDiary, saveCustomProduct, localProduct, recordScan, setInCatalog, addProductToShopping, saveOnlineProduct } from '@/features/nutrition/products';
+import { per100Of, scaleNutrients, portionOptions, lookupProduct, addProductToDiary, saveCustomProduct, localProduct, recordScan, setInCatalog, addProductToShopping, saveOnlineProduct, saveToCatalog, removeFromCatalog, isInCatalog } from '@/features/nutrition/products';
 import { store } from '@/db/store';
 import type { Food } from '@/lib/types';
 import { EanUpcReader, upcEDigitsToUpcA } from '@/features/nutrition/scanner/upce';
@@ -189,7 +189,7 @@ describe('ricerca, salvataggio e diario', () => {
     expect(localProduct('3017620422003')).toMatchObject({ name: 'Nutella (corretta)', editedFromOff: true, source: 'openfoodfacts' });
   });
 
-  it('il diario prodotti non tocca il diario alimentare e sopravvive agli aggiornamenti', async () => {
+  it('i miei prodotti non toccano il diario alimentare e sopravvive agli aggiornamenti', async () => {
     const diaryBefore = store.list('diary').length;
     const milk = localProduct('8000000000019')!;
     await setInCatalog(milk, true);
@@ -202,8 +202,24 @@ describe('ricerca, salvataggio e diario', () => {
     expect(localProduct('8000000000019')?.savedAt).toBeUndefined();
   });
 
-  it('un prodotto inserito a mano finisce nel diario prodotti', () => {
+  it('un prodotto inserito a mano finisce nei miei prodotti', () => {
     expect(localProduct('8000000000033')?.savedAt).toBeTruthy();
+  });
+
+  it('salva nei miei prodotti anche alimenti dell’app e risultati online, senza toccare il diario', async () => {
+    const diaryBefore = store.list('diary').length;
+    const generic: Food = { id: 'db_test_suppli', name: 'Supplì', kcal: 250, protein: 8, carbs: 28, fat: 12 };
+    await saveToCatalog(generic);
+    expect(isInCatalog(generic)).toBe(true);
+    expect(store.get<Food>('foods', generic.id)).toBeUndefined(); // niente copie nel database personale
+    await saveToCatalog(generic);
+    expect((store.get<any>('meta', 'me')?.savedFoods ?? []).filter((x: string) => x === generic.id)).toHaveLength(1);
+    await removeFromCatalog(generic);
+    expect(isInCatalog(generic)).toBe(false);
+    const online: Food = { id: 'off_8000000000040', barcode: '8000000000040', name: 'Crackers', kcal: 430, protein: 10, carbs: 70, fat: 11, source: 'openfoodfacts' };
+    await saveToCatalog(online);
+    expect(localProduct('8000000000040')?.savedAt).toBeTruthy();
+    expect(store.list('diary')).toHaveLength(diaryBefore);
   });
 
   it('aggiunge un prodotto alla lista della spesa una sola volta', async () => {

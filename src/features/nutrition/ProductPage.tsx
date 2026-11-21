@@ -73,7 +73,7 @@ function scanAgainUrl(sp: URLSearchParams, slot?: MealSlot) {
   const q = new URLSearchParams();
   if (sp.get('date')) q.set('date', sp.get('date')!);
   if (slot ?? sp.get('slot')) q.set('slot', (slot ?? sp.get('slot'))!);
-  if (sp.get('to') === 'shopping') q.set('to', 'shopping');
+  if (sp.get('to') === 'shopping' || sp.get('to') === 'catalog') q.set('to', sp.get('to')!);
   return `/nutrition/scan${q.toString() ? `?${q}` : ''}`;
 }
 
@@ -161,13 +161,20 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
   const missing = food.missing ?? [];
   const canAdd = per100.kcal !== null && amount > 0;
   const forShop = sp.get('to') === 'shopping';
+  const forCat = sp.get('to') === 'catalog';
   const saved = !!food.savedAt;
   const [shopAdded, setShopAdded] = useState(false);
+  const [catAdded, setCatAdded] = useState(false);
 
   async function toggleCatalog() {
     await setInCatalog(food, !saved);
     lastHandled.code = food.barcode ?? ''; lastHandled.at = Date.now();
-    toast(saved ? 'Tolto dal diario prodotti' : 'Salvato nel diario prodotti: non conta nei valori di oggi');
+    toast(saved ? 'Tolto dai miei prodotti' : 'Salvato nei miei prodotti: non conta nei valori di oggi');
+  }
+  async function saveForCatalog() {
+    if (!saved) await setInCatalog(food, true);
+    lastHandled.code = food.barcode ?? ''; lastHandled.at = Date.now();
+    setCatAdded(true);
   }
   async function addToShop() {
     const ok = await addProductToShopping(food);
@@ -227,11 +234,13 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
           </section>
 
           <section className="product-actions" aria-label="Altre opzioni">
-            <button className={`btn ${saved ? 'soft' : ''}`} onClick={toggleCatalog} aria-pressed={saved}>
-              {saved ? <BookmarkCheck size={18} /> : <BookmarkPlus size={18} />} {saved ? 'Nel diario prodotti' : 'Salva nel diario prodotti'}
-            </button>
-            {forShop
-              ? <button className="btn" onClick={toMeal}><Utensils size={18} /> Aggiungi a un pasto</button>
+            {forCat ? <button className="btn" onClick={addToShop}><ShoppingCart size={18} /> Lista spesa</button> : (
+              <button className={`btn ${saved ? 'soft' : ''}`} onClick={toggleCatalog} aria-pressed={saved}>
+                {saved ? <BookmarkCheck size={18} /> : <BookmarkPlus size={18} />} {saved ? 'Nei miei prodotti' : 'Salva nei miei prodotti'}
+              </button>
+            )}
+            {forShop || forCat
+              ? <button className="btn" onClick={toMeal}><Utensils size={18} /> {forCat ? 'A un pasto' : 'Aggiungi a un pasto'}</button>
               : <button className="btn" onClick={addToShop}><ShoppingCart size={18} /> Aggiungi alla lista spesa</button>}
           </section>
 
@@ -277,7 +286,7 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
         </div>
 
         <div className="stack">
-          {!forShop && <section className="card stack-sm" aria-label="Quantità consumata">
+          {!forShop && !forCat && <section className="card stack-sm" aria-label="Quantità consumata">
             <div className="card-title"><h3>Quanto ne hai consumato?</h3></div>
             {options.length > 1 && (
               <div className="qty-units" role="radiogroup" aria-label="Unità di misura">
@@ -332,7 +341,12 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
         </div>
       </div>
 
-      {forShop ? (
+      {forCat ? (
+        <div className="product-cta">
+          {saved && <div className="small row" style={{ gap: 6 }}><BookmarkCheck size={16} /> Nei miei prodotti</div>}
+          <button className={`btn ${saved ? '' : 'primary'} lg grow`} onClick={() => { if (saved) { unlockAudio(); nav(scanAgainUrl(sp), { replace: true }); } else void saveForCatalog(); }}>{saved ? <><ScanBarcode size={19} /> Scansiona un altro</> : <><BookmarkPlus size={19} /> Salva nei miei prodotti</>}</button>
+        </div>
+      ) : forShop ? (
         <div className="product-cta">
           <button className="btn primary lg grow" onClick={addToShop}><ShoppingCart size={19} /> Aggiungi alla lista spesa</button>
         </div>
@@ -348,8 +362,16 @@ function ProductView({ food, onEdit, onRefetch }: { food: Food; onEdit: () => vo
           <button className="btn primary block lg" onClick={() => { unlockAudio(); nav(scanAgainUrl(sp), { replace: true }); }}><ScanBarcode size={18} /> Scansiona un altro prodotto</button>
           <button className="btn block" onClick={() => nav('/nutrition/shopping')}>Torna alla lista <ChevronRight size={16} /></button>
         </div>}>
-        <div className="row small" style={{ gap: 8 }}><span className="added-ic"><Check size={16} /></span><span><b>{food.name}</b> è nella lista della spesa.{saved ? '' : ' Puoi salvarlo anche nel diario prodotti per ritrovarlo.'}</span></div>
-        {!saved && <button className="btn block" style={{ marginTop: 12 }} onClick={toggleCatalog}><BookmarkPlus size={18} /> Salva nel diario prodotti</button>}
+        <div className="row small" style={{ gap: 8 }}><span className="added-ic"><Check size={16} /></span><span><b>{food.name}</b> è nella lista della spesa.{saved ? '' : ' Puoi salvarlo anche nei tuoi prodotti per ritrovarlo.'}</span></div>
+        {!saved && <button className="btn block" style={{ marginTop: 12 }} onClick={toggleCatalog}><BookmarkPlus size={18} /> Salva nei miei prodotti</button>}
+      </Sheet>
+
+      <Sheet open={catAdded} onClose={() => setCatAdded(false)} title="Nei miei prodotti"
+        footer={<div className="stack-sm" style={{ width: '100%' }}>
+          <button className="btn primary block lg" onClick={() => { unlockAudio(); nav(scanAgainUrl(sp), { replace: true }); }}><ScanBarcode size={18} /> Scansiona un altro prodotto</button>
+          <button className="btn block" onClick={() => nav('/nutrition/foods')}>Vai ai miei prodotti <ChevronRight size={16} /></button>
+        </div>}>
+        <div className="row small" style={{ gap: 8 }}><span className="added-ic"><Check size={16} /></span><span><b>{food.name}</b> è salvato nei tuoi prodotti. Non conta nei valori di oggi: lo aggiungi a un pasto quando vuoi.</span></div>
       </Sheet>
 
       <Sheet open={pickMeal} onClose={() => setPickMeal(false)} title="In quale pasto?"

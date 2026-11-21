@@ -27,7 +27,7 @@ export default function ScannerPage() {
   const ctx = new URLSearchParams();
   if (sp.get('date')) ctx.set('date', sp.get('date')!);
   if (sp.get('slot')) ctx.set('slot', sp.get('slot')!);
-  if (sp.get('to') === 'shopping') ctx.set('to', 'shopping');
+  if (sp.get('to') === 'shopping' || sp.get('to') === 'catalog') ctx.set('to', sp.get('to')!);
   const qs = ctx.toString() ? `?${ctx}` : '';
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -229,7 +229,7 @@ export default function ScannerPage() {
           <div className="stack-sm" style={{ width: '100%', maxWidth: 340 }}>
             {err.kind !== 'insecure' && err.kind !== 'unsupported' && err.kind !== 'nocamera' && <button className="btn primary block" onClick={() => setAttempt((n) => n + 1)}><RefreshCw size={17} /> Riprova</button>}
             <button className="btn block" onClick={() => { setTyped(''); setTypedErr(null); setManual(true); }}><Keyboard size={17} /> Digita il codice a barre</button>
-            <Link className="btn ghost block" to={`/nutrition/scanned${qs}`}><History size={17} /> Diario prodotti</Link>
+            <Link className="btn ghost block" to={`/nutrition/foods${qs}`}><History size={17} /> I miei prodotti</Link>
           </div>
         </div>
       )}
@@ -246,7 +246,7 @@ export default function ScannerPage() {
           )}
           <div className="scanner-actions">
             <button className="scan-pill" onClick={() => { setTyped(''); setTypedErr(null); setManual(true); }}><Keyboard size={18} /> Digita codice</button>
-            <Link className="scan-pill" to={`/nutrition/scanned${qs}`}><History size={18} /> Diario prodotti</Link>
+            <Link className="scan-pill" to={`/nutrition/foods${qs}`}><History size={18} /> I miei prodotti</Link>
           </div>
           {engine && <div className="tiny scanner-engine">{engine === 'native' ? 'Lettore del sistema' : 'Lettore ZXing'} · EAN-13, EAN-8, UPC-A, UPC-E</div>}
         </div>

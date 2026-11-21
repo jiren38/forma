@@ -128,20 +128,49 @@ export async function saveCustomProduct(f: Food, base?: Food): Promise<Food> {
     ...prev, ...f, id, barcode: code, custom: true,
     source: fromOff ? 'openfoodfacts' : 'custom', editedFromOff: fromOff || prev?.editedFromOff || undefined,
     scannedAt: prev?.scannedAt ?? f.scannedAt, scanCount: prev?.scanCount ?? f.scanCount, updatedAt: new Date().toISOString(),
-    // un prodotto inserito a mano finisce subito nel diario prodotti
+    // un prodotto inserito a mano finisce subito nei miei prodotti
     savedAt: prev?.savedAt ?? base?.savedAt ?? (fromOff ? undefined : new Date().toISOString()),
   };
   if (!next.savedAt) delete next.savedAt;
   return store.put('foods', id, next);
 }
 
-// ---------------------------------------------------------------- diario prodotti
-/** Salva (o toglie) il prodotto dal diario prodotti. Non crea voci nel diario alimentare. */
+// ---------------------------------------------------------------- i miei prodotti (catalogo personale)
+/** Salva (o toglie) il prodotto dai miei prodotti. Non crea voci nel diario alimentare. */
 export async function setInCatalog(f: Food, on: boolean): Promise<Food> {
   const cur = store.get<Food>('foods', f.id) ?? f;
   const next: Food = { ...cur, savedAt: on ? cur.savedAt ?? new Date().toISOString() : undefined };
   if (!on) delete next.savedAt;
   return store.put('foods', f.id, next);
+}
+
+/** Alimento creato a mano senza codice a barre: fa sempre parte dei miei prodotti. */
+export const isOwnFood = (f: Food) => f.source === 'custom' && !f.barcode;
+
+/** true se l'alimento è tra i miei prodotti (documento salvato, alimento mio o voce del database salvata). */
+export function isInCatalog(f: Food, m: Partial<Meta> = (store.get<Meta>('meta', 'me') ?? {}) as Partial<Meta>): boolean {
+  const doc = store.get<Food>('foods', f.id);
+  if (doc) return !!doc.savedAt || isOwnFood(doc);
+  return !!f.savedAt || (m.savedFoods ?? []).includes(f.id);
+}
+
+/**
+ * Aggiunge ai miei prodotti un alimento qualsiasi: prodotti con codice (anche appena trovati online)
+ * diventano un documento in 'foods' con savedAt; le voci del database generico vanno in meta.savedFoods.
+ */
+export async function saveToCatalog(f: Food): Promise<void> {
+  if (store.get<Food>('foods', f.id)) { await setInCatalog(f, true); return; }
+  if (f.barcode || f.source === 'openfoodfacts') { await saveOnlineProduct(f); await setInCatalog(f, true); return; }
+  const m = (store.get<Meta>('meta', 'me') ?? {}) as Partial<Meta>;
+  const ids = m.savedFoods ?? [];
+  if (!ids.includes(f.id)) await patchMeta({ savedFoods: [f.id, ...ids] });
+}
+
+/** Toglie dai miei prodotti senza cancellare i dati (gli alimenti creati a mano si eliminano a parte). */
+export async function removeFromCatalog(f: Food): Promise<void> {
+  if (store.get<Food>('foods', f.id)) await setInCatalog(f, false);
+  const m = (store.get<Meta>('meta', 'me') ?? {}) as Partial<Meta>;
+  if ((m.savedFoods ?? []).includes(f.id)) await patchMeta({ savedFoods: m.savedFoods!.filter((x) => x !== f.id) });
 }
 
 // ---------------------------------------------------------------- lista della spesa
