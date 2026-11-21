@@ -17,13 +17,56 @@ export function findFood(id: string | undefined): Food | undefined {
 }
 export function allFoods(custom: Food[]): Food[] { return [...custom, ...FOODS]; }
 
+/** Radice semplice di una parola italiana: toglie la vocale finale (pizza/pizze, panino/panini). */
+const stem = (w: string) => (w.length > 4 ? w.replace(/[aeiouy]$/, '') : w);
+const STOP = new Set(['di', 'da', 'con', 'al', 'alla', 'alle', 'allo', 'ai', 'agli', 'il', 'la', 'le', 'lo', 'i', 'gli', 'e', 'in', 'del', 'della', 'dei', 'un', 'una']);
+/** Le parole del testo, normalizzate. */
+const tokens = (s: string) => normalize(s).split(/[^a-z0-9]+/).filter(Boolean);
+/** Distanza di modifica limitata (per tollerare un errore di battitura). */
+function within1(a: string, b: string) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, diff = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * Ricerca tollerante: ogni parola cercata deve comparire nel nome, nella marca, nella categoria o nei
+ * sinonimi, anche al plurale, come inizio di parola o con un errore di battitura (parole di 5+ lettere).
+ * Ordine: nome che inizia con la ricerca, poi parole trovate nel nome, poi i nomi più corti.
+ */
 export function searchFoods(list: Food[], q: string) {
   const n = normalize(q.trim());
   if (!n) return list;
-  const words = n.split(/\s+/);
-  return list
-    .filter((f) => { const h = normalize(`${f.name} ${f.brand ?? ''} ${f.category ?? ''}`); return words.every((w) => h.includes(w)); })
-    .sort((a, b) => (normalize(a.name).startsWith(n) ? 0 : 1) - (normalize(b.name).startsWith(n) ? 0 : 1) || a.name.length - b.name.length);
+  const words = tokens(n).filter((w) => !STOP.has(w));
+  if (!words.length) return list;
+  type Hit = { f: Food; score: number };
+  const hits: Hit[] = [];
+  for (const f of list) {
+    const nameT = tokens(f.name);
+    const otherT = tokens(`${f.brand ?? ''} ${f.category ?? ''} ${f.keywords ?? ''}`);
+    let score = 0, ok = true;
+    for (const w of words) {
+      const sw = stem(w);
+      const m = (t: string) => t === w ? 3 : t.startsWith(w) ? 2.5 : stem(t) === sw || t.startsWith(sw) && sw.length >= 4 ? 2 : w.length >= 5 && within1(stem(t), sw) ? 1 : 0;
+      let best = 0;
+      for (const t of nameT) { best = Math.max(best, m(t) * 2); if (best === 6) break; }
+      if (best < 6) for (const t of otherT) best = Math.max(best, m(t));
+      if (!best) { ok = false; break; }
+      score += best;
+    }
+    if (!ok) continue;
+    const nn = normalize(f.name);
+    if (nn.startsWith(n)) score += 8;
+    else if (nn.includes(n)) score += 3;
+    if (f.custom) score += 1; // i propri prodotti prima a parità di risultato
+    hits.push({ f, score });
+  }
+  return hits.sort((a, b) => b.score - a.score || a.f.name.length - b.f.name.length).map((h) => h.f);
 }
 
 /** Pasto suggerito in base all'ora. */

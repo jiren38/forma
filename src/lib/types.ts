@@ -255,6 +255,8 @@ export interface Food {
   category?: string;
   unitGrams?: number; // peso di 1 porzione/pezzo
   unitName?: string;
+  /** Sinonimi usati solo dalla ricerca (es. "arancina" per arancino). */
+  keywords?: string;
   custom?: boolean;
   source?: 'db' | 'custom' | 'openfoodfacts';
   // ---- prodotti confezionati (scanner) ----
