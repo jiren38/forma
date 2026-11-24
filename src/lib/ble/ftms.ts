@@ -43,6 +43,8 @@ export interface FtmsControl {
   limits: ControlLimits | null;
   /** ultimo evento segnalato dall'attrezzo (stop dal pulsante, chiave di sicurezza…) */
   lastEvent: MachineEvent | null;
+  /** registro degli ultimi comandi e risposte (per capire i problemi) */
+  log: string[];
 }
 
 const FTMS = 0x1826;
@@ -53,7 +55,7 @@ const CONTROL_POINT = 0x2ad9;
 const MACHINE_STATUS = 0x2ada;
 const RANGE_CHARS = { speed: 0x2ad4, incline: 0x2ad5, resistance: 0x2ad6 } as const;
 
-const controlOff: FtmsControl = { status: 'unavailable', error: null, targets: {}, running: false, limits: null, lastEvent: null };
+const controlOff: FtmsControl = { status: 'unavailable', error: null, targets: {}, running: false, limits: null, lastEvent: null, log: [] };
 const initial: FtmsState = { status: 'idle', ownerUid: null, device: null, kind: null, live: {}, moving: false, summary: null, error: null, lastPacketAt: null, control: controlOff };
 let state: FtmsState = initial;
 const subs = new Set<() => void>();
@@ -90,6 +92,7 @@ function onPacket(ev: any) {
     acc.push(parseFtmsPacket(acc.kind, dv), Date.now());
   } catch { return; /* pacchetto troncato: si ignora */ }
   set({ live: acc.live, moving: acc.moving, summary: acc.summary(), lastPacketAt: Date.now() });
+  speedWatchdog(Date.now());
 }
 
 function onDisconnected() {
@@ -215,6 +218,45 @@ export function onFtmsMachineEvent(fn: (e: MachineEvent) => void) { eventListene
 
 function setControl(p: Partial<FtmsControl>) { set({ control: { ...state.control, ...p } }); }
 
+const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join(' ');
+const CMD_NAME: Record<number, string> = { 0x00: 'richiesta controllo', 0x02: 'velocità', 0x03: 'pendenza', 0x04: 'resistenza', 0x07: 'avvio', 0x08: 'stop/pausa' };
+function logLine(text: string) {
+  const t = new Date();
+  const ts = `${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+  const sp = state.live.speedKmh != null ? ` [nastro ${state.live.speedKmh.toFixed(1)} km/h]` : '';
+  setControl({ log: [...state.control.log, `${ts} ${text}${sp}`].slice(-40) });
+}
+
+// ------------------------------------------------ controllo di sicurezza della velocità
+// Se il nastro va molto più veloce di quanto chiesto (o oltre il limite dell'utente) dopo il tempo
+// necessario ad adeguarsi, si ripete la velocità; se continua, si ferma il tapis.
+let lastSpeedCmd = { at: 0, from: 0 };
+let overSince: number | null = null;
+let resent = false;
+const OVER_KMH = 2;
+
+function speedWatchdog(now: number) {
+  const c = state.control;
+  const v = state.live.speedKmh;
+  const target = c.targets.speed;
+  if (state.kind !== 'treadmill' || c.status !== 'on' || !c.running || v == null || target == null || target <= 0) { overSince = null; return; }
+  const settle = 4000 + Math.abs(target - lastSpeedCmd.from) * 1500;
+  const overLimit = !!c.limits && v > c.limits.speed.max + 1;
+  const overTarget = v > target + OVER_KMH && v > target * 1.3;
+  if (!(overLimit || overTarget) || (!overLimit && now - lastSpeedCmd.at < settle) || now - lastSpeedCmd.at < 2500) { overSince = null; return; }
+  overSince ??= now;
+  if (now - overSince < 2500) return;
+  overSince = null;
+  if (!resent && !overLimit) {
+    resent = true;
+    logLine(`controllo sicurezza: nastro troppo veloce, ripeto ${target} km/h`);
+    void setFtmsSpeed(target, true);
+    return;
+  }
+  logLine('controllo sicurezza: nastro oltre la velocità prevista, STOP');
+  void stopFtms().then(() => setControl({ error: `Il tapis andava a ${v.toFixed(1)} km/h invece di ${target} km/h: l’ho fermato per sicurezza. Mandami il registro comandi qui sotto.` }));
+}
+
 function onCpIndication(ev: any) {
   const dv: DataView | undefined = ev?.target?.value;
   if (!dv) return;
@@ -230,6 +272,7 @@ function onStatus(ev: any) {
   if (!dv) return;
   const e = parseMachineStatus(dv);
   if (e === 'other') return;
+  logLine(`attrezzo: ${e}`);
   if (e === 'stopped' || e === 'paused' || e === 'safety_key') setControl({ running: false, lastEvent: e });
   else if (e === 'control_lost') setControl({ status: 'off', running: false, lastEvent: e });
   else setControl({ lastEvent: e });
@@ -264,7 +307,12 @@ async function write(bytes: Uint8Array): Promise<{ ok: boolean; message: string 
 /** Mette in coda un comando: i comandi partono uno dopo l'altro, nell'ordine. */
 function enqueue(bytes: Uint8Array): Promise<{ ok: boolean; message: string }> {
   const gen = generation;
-  const run = chain.then(() => (gen === generation ? write(bytes) : { ok: false, message: 'Annullato' }));
+  const run = chain.then(async () => {
+    if (gen !== generation) return { ok: false, message: 'Annullato' };
+    const r = await write(bytes);
+    logLine(`${CMD_NAME[bytes[0]] ?? 'comando'} (${hex(bytes)}) → ${r.ok ? r.message === 'ok' ? 'ok' : r.message : r.message}`);
+    return r;
+  });
   chain = run.catch(() => undefined);
   return run;
 }
@@ -298,6 +346,7 @@ export async function takeFtmsControl(spec?: MachineSpec): Promise<boolean> {
   const r = await enqueue(cmd.requestControl());
   if (!r.ok) { setControl({ status: 'error', error: r.message, limits }); return false; }
   setControl({ status: 'on', error: null, limits, targets: {}, running: false, lastEvent: null });
+  logLine(`limiti: velocità ${limits.speed.min}–${limits.speed.max} km/h, pendenza ${limits.incline.min}–${limits.incline.max}%${speed ? ` (tapis ${speed.min}–${speed.max})` : ''}`);
   return true;
 }
 
@@ -311,6 +360,7 @@ const controlling = () => state.control.status === 'on' && !!state.control.limit
 
 export async function startFtms(): Promise<boolean> {
   if (!controlling()) return false;
+  lastSpeedCmd = { at: Date.now(), from: state.live.speedKmh ?? 0 };
   const r = await enqueue(cmd.start());
   if (r.ok) setControl({ running: true, error: null }); else setControl({ error: r.message });
   return r.ok;
@@ -331,13 +381,17 @@ export async function stopFtms(): Promise<boolean> {
   if (pending) { clearTimeout(pending.timer); pending.resolve({ ok: false, message: 'Annullato dallo STOP' }); pending = null; }
   let r = await write(cmd.stop());
   if (!r.ok) r = await write(cmd.stop()); // un secondo tentativo
+  logLine(`STOP → ${r.ok ? 'ok' : r.message}`);
   setControl({ running: false, targets: { ...state.control.targets, speed: 0 }, error: r.ok ? null : `STOP non confermato: usa il pulsante o la chiave di sicurezza dell’attrezzo. (${r.message})` });
   return r.ok;
 }
 
-export async function setFtmsSpeed(kmh: number): Promise<number | null> {
+export async function setFtmsSpeed(kmh: number, retry = false): Promise<number | null> {
   if (!controlling() || state.kind !== 'treadmill') return null;
   const v = clampTarget(kmh, state.control.limits!.speed);
+  lastSpeedCmd = { at: Date.now(), from: state.live.speedKmh ?? 0 };
+  if (!retry) resent = false;
+  overSince = null;
   setControl({ targets: { ...state.control.targets, speed: v } });
   const r = await enqueue(cmd.speed(v));
   if (!r.ok) setControl({ error: r.message });

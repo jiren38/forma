@@ -1,5 +1,5 @@
 // Comandi FTMS a tapis e cyclette: pacchetti, limiti di sicurezza, percorsi e flusso dei comandi.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clampTarget, cmd, effectiveLimits, parseCpResponse, parseMachineStatus, parseRange } from '@/lib/ftms-control';
 import { routesFor, routeStats, guessLevel, blankRoutePlan } from '@/lib/routes';
 import { expandPhases } from '@/lib/cardio';
@@ -97,14 +97,18 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
       },
     });
     const status: any = ch('2ada', { addEventListener: (_: string, f: any) => statusListeners.push(f) });
-    const chars = [ch('2acd'), cp, status,
+    const dataListeners: ((ev: any) => void)[] = [];
+    const data: any = ch('2acd', { addEventListener: (_: string, f: any) => dataListeners.push(f) });
+    const chars = [data, cp, status,
       ch('2ad4', { readValue: async () => dv(80, 0, 0x40, 0x06, 10, 0) }),
       ch('2ad5', { readValue: async () => dv(0, 0, 120, 0, 10, 0) })];
     const device = { name: 'FS-505551', addEventListener() {}, removeEventListener() {},
       gatt: { connected: false, async connect() { return this; }, disconnect() {}, async getPrimaryServices() { return [{ uuid: '1826', getCharacteristics: async () => chars }]; } } };
     (navigator as any).bluetooth = { requestDevice: async () => device };
     const emitStatus = (...b: number[]) => { status.value = dv(...b); statusListeners.forEach((f) => f({ target: status })); };
-    return { writes, emitStatus };
+    /** pacchetto dati del tapis con la sola velocità istantanea */
+    const emitSpeed = (kmh: number) => { const v = Math.round(kmh * 100); data.value = dv(0, 0, v & 255, v >> 8); dataListeners.forEach((f) => f({ target: data })); };
+    return { writes, emitStatus, emitSpeed };
   }
 
   it('richiesta controllo, avvio, velocità limitata, STOP', async () => {
@@ -129,6 +133,50 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     expect(await f.stopFtms()).toBe(true);
     expect(writes).toEqual([[0x00], [0x07], [0x02, 0x84, 0x03], [0x03, 0x3c, 0x00], [0x08, 0x01]]);
     await f.disconnectFtms();
+  });
+
+  it('controllo di sicurezza: nastro troppo veloce → ripete la velocità, poi STOP', async () => {
+    const { writes, emitSpeed } = fakeTreadmill();
+    const f = await import('@/lib/ble/ftms');
+    f.__resetFtms();
+    let now = 1_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      await f.connectFtms('ex1');
+      await f.takeFtmsControl({ maxSpeed: 12 });
+      expect(await f.setFtmsSpeed(5)).toBe(5);
+      expect(await f.startFtms()).toBe(true);
+      // durante l'avvio il nastro può accelerare: nessun intervento
+      emitSpeed(12); now += 3000; emitSpeed(12);
+      expect(writes.filter((w) => w[0] === 0x08)).toEqual([]);
+      // a regime è ancora a 12 km/h invece di 5: si ripete la velocità
+      now += 8000; emitSpeed(12); now += 3000; emitSpeed(12); now += 3000; emitSpeed(12);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(writes[writes.length - 1]).toEqual([0x02, 0xf4, 0x01]);
+      // continua: STOP
+      now += 12000; emitSpeed(12); now += 3000; emitSpeed(12); now += 3000; emitSpeed(12);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(writes[writes.length - 1]).toEqual([0x08, 0x01]);
+      expect(f.getFtmsState().control.error).toMatch(/fermato per sicurezza/);
+      expect(f.getFtmsState().control.log.some((l) => l.includes('STOP'))).toBe(true);
+    } finally { spy.mockRestore(); await f.disconnectFtms(); }
+  });
+
+  it('alla velocità giusta il controllo non interviene', async () => {
+    const { writes, emitSpeed } = fakeTreadmill();
+    const f = await import('@/lib/ble/ftms');
+    f.__resetFtms();
+    let now = 2_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      await f.connectFtms('ex1');
+      await f.takeFtmsControl({ maxSpeed: 12 });
+      await f.setFtmsSpeed(5);
+      await f.startFtms();
+      for (let i = 0; i < 20; i++) { now += 1000; emitSpeed(5.2); }
+      await new Promise((r) => setTimeout(r, 20));
+      expect(writes).toEqual([[0x00], [0x02, 0xf4, 0x01], [0x07]]);
+    } finally { spy.mockRestore(); await f.disconnectFtms(); }
   });
 
   it('se l’attrezzo rifiuta il controllo non invia altri comandi', async () => {

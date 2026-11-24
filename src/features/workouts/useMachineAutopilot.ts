@@ -54,10 +54,15 @@ export function useMachineAutopilot({ uid, plan, running, phase, phaseIndex, fin
     if (started) {
       void (async () => {
         const kind = getFtmsState().kind;
-        const ok = getFtmsState().control.running || (await startFtms());
+        const already = getFtmsState().control.running;
+        // Prima dell'avvio si imposta già la velocità del programma: alcuni tapis, avviati senza
+        // una velocità obiettivo, partono al massimo.
+        if (!already && kind === 'treadmill') await applyPhaseTargets(latest.current.phase, latest.current.plan);
+        const ok = already || (await startFtms());
         if (!ok) return;
         if (kind === 'treadmill') await wait(TREADMILL_START_DELAY_MS);
         if (!latest.current.running) return;
+        // e la si ripete dopo il conto alla rovescia, quando il nastro è partito
         await applyPhaseTargets(latest.current.phase, latest.current.plan);
       })();
       return;
