@@ -1319,3 +1319,59 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .catalog-add-btn.primary span { opacity: .8; }
 a.card.catalog-link { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 12px 14px; }
 .catalog-link .t-ic { flex-shrink: 0; }
+
+/* ---- Comandi dell'attrezzo (tapis/cyclette) ---- */
+.mp-control-off { margin-top: 12px; }
+.mp-control { margin-top: 12px; padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); }
+.mp-control-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--accent-ink); }
+.mp-control-head .link { background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer; }
+.mp-control-head .link:disabled { opacity: .4; cursor: default; }
+.mp-steppers { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+.mp-step { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l c" "m c"; align-items: center; column-gap: 10px; row-gap: 2px;
+  padding: 10px 10px 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); min-width: 0; }
+.mp-step .l { grid-area: l; }
+.mp-step > .tiny { grid-area: m; }
+.mp-step > .row-between { grid-area: c; }
+.mp-step .v { min-width: 84px; text-align: center; }
+.mp-step .l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.mp-step .v { font-family: var(--font-display); font-weight: 800; font-size: 24px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mp-step .v small { font-family: var(--font); font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 2px; }
+.mp-step .icon-btn { width: 40px; height: 40px; flex: none; }
+.mp-stop { width: 100%; margin-top: 12px; min-height: 56px; font-size: 18px; font-weight: 800; letter-spacing: .08em;
+  background: var(--danger); color: #fff; border-color: transparent; }
+.mp-stop:active { transform: scale(.98); }
+.mp-stop-fab { position: fixed; z-index: 90; right: 16px; bottom: calc(16px + var(--safe-b)); width: 76px; height: 76px; border-radius: 50%;
+  border: 3px solid #fff; background: var(--danger); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; font-weight: 800; font-size: 12px; letter-spacing: .08em; box-shadow: 0 8px 28px rgba(255, 60, 60, .45); cursor: pointer; }
+.mp-stop-fab:active { transform: scale(.95); }
+.safety-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+
+/* ---- Percorsi guidati ---- */
+.routes-promo { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: var(--radius-lg); color: var(--text);
+  background: radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--c-cardio) 22%, transparent), transparent 60%), var(--surface);
+  border: 1px solid color-mix(in srgb, var(--c-cardio) 30%, var(--border)); }
+.routes-promo .rp-ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; flex: none; background: var(--c-cardio); color: #fff; }
+.routes-promo b { display: block; font-size: 16px; }
+.routes-promo .grow > span { display: block; font-size: 13px; color: var(--text-2); }
+.route-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.route-card { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; text-align: left; cursor: pointer; color: var(--text);
+  border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); transition: transform var(--dur-fast) var(--ease), border-color var(--dur-fast); }
+.route-card:hover { border-color: color-mix(in srgb, var(--c-cardio) 45%, var(--border)); }
+.route-card:active { transform: scale(.985); }
+.route-card .route-chart { padding: 10px 10px 0; background: var(--surface-2); }
+.route-card-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.route-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-2); }
+.route-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.route-chart svg { display: block; width: 100%; }
+.route-axis { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.route-axis .legend { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.route-axis .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.route-axis .legend i.b { background: var(--c-cardio); }
+.route-axis .legend i.l { height: 2px; background: var(--accent); margin-left: 6px; }
+.route-axis > span:nth-child(2) { flex: 1; text-align: center; }
+.lvl-pill { flex: none; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; color: var(--lc); background: color-mix(in srgb, var(--lc) 14%, transparent); }
+.lvl-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.route-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 8px; }
+.route-kpis > div { display: flex; flex-direction: column; align-items: center; padding: 8px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.route-kpis b { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.route-kpis span { font-size: 11px; color: var(--muted); }

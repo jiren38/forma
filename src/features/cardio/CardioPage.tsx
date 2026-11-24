@@ -58,6 +58,12 @@ export default function CardioPage() {
       <SectionHero section="cardio" title="Cardio" desc="Tapis roulant, cyclette, corsa e intervalli: dentro le schede o registrati a parte."
         actions={<><button className="btn primary" onClick={() => setEdit(blank())}><Plus size={18} /> Registra attività</button><Link to="/progress?tab=cardio" className="btn"><HeartPulse size={17} /> Progressi</Link></>} />
 
+      <Link to="/cardio/routes" className="routes-promo">
+        <span className="rp-ic" aria-hidden><Route size={22} /></span>
+        <span className="grow"><b>Percorsi guidati</b><span>Tapis e cyclette: l’app cambia velocità, pendenza e resistenza al posto tuo.</span></span>
+        <ChevronRight size={20} />
+      </Link>
+
       <div className="section-title" style={{ marginTop: 6 }}>Inizia un’attività</div>
       <div className="act-grid">
         {QUICK.map((q) => (

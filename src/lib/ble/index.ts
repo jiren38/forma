@@ -6,8 +6,9 @@
 // (requestDevice → device.gatt.connect → getPrimaryServices → getCharacteristics → readValue/startNotifications).
 // Così le schermate che parlano Bluetooth funzionano uguali in entrambi i casi.
 //
-// Sicurezza: l'adattatore nativo NON espone writeValue né altri metodi di scrittura.
-// In questa fase l'app legge soltanto e non invia comandi agli attrezzi.
+// Sicurezza: l'adattatore nativo espone la scrittura SOLO sul Fitness Machine Control Point (0x2AD9),
+// l'unico punto usato per comandare tapis e cyclette (avvio, stop, velocità, pendenza, resistenza).
+// Tutte le altre caratteristiche restano in sola lettura.
 import { isNativeApp } from '@/lib/native';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -108,7 +109,22 @@ class NativeCharacteristic extends Emitter {
     await c.stopNotifications(this.deviceId, this.service.uuid, this.uuid);
     return this;
   }
-  // Nessun writeValue / writeValueWithResponse / writeValueWithoutResponse: di proposito.
+  // Nessun writeValue / writeValueWithoutResponse, di proposito: si scrive solo con risposta e solo
+  // sul Control Point FTMS (vedi NativeService.getCharacteristics / withControlWrite).
+}
+
+const CONTROL_POINT_UUID = toFullUuid('2ad9');
+
+/** Aggiunge writeValueWithResponse solo al Fitness Machine Control Point. */
+function withControlWrite(ch: NativeCharacteristic, deviceId: string): NativeCharacteristic {
+  if (ch.uuid !== CONTROL_POINT_UUID) return ch;
+  (ch as any).writeValueWithResponse = async (value: BufferSource) => {
+    const c = await client();
+    const bytes = value instanceof DataView ? value : ArrayBuffer.isView(value)
+      ? new DataView(value.buffer, value.byteOffset, value.byteLength) : new DataView(value as ArrayBuffer);
+    await c.write(deviceId, ch.service.uuid, ch.uuid, bytes);
+  };
+  return ch;
 }
 
 class NativeService {
@@ -140,7 +156,7 @@ class NativeGatt {
     const list = await c.getServices(this.device.id);
     return list.map((s) => {
       const svc = new NativeService(toFullUuid(s.uuid));
-      svc.chars = s.characteristics.map((ch) => new NativeCharacteristic(this.device.id, svc, toFullUuid(ch.uuid), { ...ch.properties } as any));
+      svc.chars = s.characteristics.map((ch) => withControlWrite(new NativeCharacteristic(this.device.id, svc, toFullUuid(ch.uuid), { ...ch.properties } as any), this.device.id));
       return svc;
     });
   }

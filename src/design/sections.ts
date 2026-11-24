@@ -52,6 +52,7 @@ export const SECTIONS: Record<SectionKey, Section> = {
   cardio: {
     key: 'cardio', label: 'Cardio', tagline: 'Tapis roulant, cyclette, intervalli e corsa', to: '/cardio', icon: HeartPulse, color: 'var(--c-cardio)',
     links: [
+      { label: 'Percorsi guidati', to: '/cardio/routes' },
       { label: 'Registra attività', to: '/cardio?new=1' },
       { label: 'Storico cardio', to: '/cardio' },
       { label: 'Progressi cardio', to: '/progress?tab=cardio' },
@@ -117,6 +118,10 @@ const ROUTES: [RegExp, RouteMeta][] = [
   [/^\/history/, { section: 'training', crumb: 'Storico', desc: 'Tutte le sessioni completate, dalla più recente.' }],
   [/^\/exercises\/./, { section: 'exercises', crumb: 'Esercizio' }],
   [/^\/exercises/, { section: 'exercises', desc: 'Animazioni dimostrative, muscoli coinvolti, tecnica ed errori da evitare.' }],
+  [/^\/cardio\/routes\/edit/, { section: 'cardio', crumb: 'Percorso personalizzato', desc: 'Crea le fasi del tuo percorso: durata, velocità e pendenza oppure resistenza.' }],
+  [/^\/cardio\/routes/, { section: 'cardio', crumb: 'Percorsi', desc: 'Percorsi guidati per tapis roulant e cyclette: l’app può comandare l’attrezzo fase per fase.' }],
+  [/^\/cardio\/routes\/edit/, { section: 'cardio', crumb: 'Percorso personalizzato', desc: 'Crea le fasi del tuo percorso: durata, velocità e pendenza oppure resistenza.' }],
+  [/^\/cardio\/routes/, { section: 'cardio', crumb: 'Percorsi', desc: 'Percorsi guidati per tapis roulant e cyclette: l’app può comandare l’attrezzo fase per fase.' }],
   [/^\/cardio/, { section: 'cardio', desc: 'Corsa, tapis roulant, cyclette e altre attività registrate fuori dalle schede.' }],
   [/^\/nutrition\/add/, { section: 'nutrition', crumb: 'Cerca alimenti', desc: 'Cerca nel database, nei tuoi alimenti o scansiona un codice a barre.' }],
   [/^\/nutrition\/recipes/, { section: 'nutrition', crumb: 'Ricette', desc: 'Ricette con valori nutrizionali calcolati dagli ingredienti.' }],

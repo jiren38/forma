@@ -1,18 +1,19 @@
 /**
  * Riquadro "Attrezzo collegato" dentro un'attività cardio: collega la cyclette o il tapis roulant
- * via Bluetooth e mostra i dati dal vivo. SOLO LETTURA: l'app non comanda l'attrezzo.
+ * via Bluetooth, mostra i dati dal vivo e (se l'utente li attiva) i comandi dell'attrezzo.
  */
 import { useState } from 'react';
 import { Bluetooth, BluetoothOff, Play, RefreshCw, Unplug } from 'lucide-react';
 import { connectFtms, disconnectFtms, ftmsSupported, moveFtmsTo, reconnectFtms, useFtms } from '@/lib/ble/ftms';
 import { formatClock, fmtN } from '@/lib/util';
-import type { CardioLogState, CardioMachine, CardioPhase } from '@/lib/types';
+import type { CardioLogState, CardioMachine, CardioPhase, Profile } from '@/lib/types';
+import { MachineControl } from './MachineControl';
 
 /** Macchine che possono inviare dati FTMS. */
 export const FTMS_MACHINES: CardioMachine[] = ['bike', 'treadmill'];
 
-export function MachineLink({ uid, c, onStartTimer, canStart, target }: {
-  uid: string; c: CardioLogState; onStartTimer: () => void; canStart: boolean;
+export function MachineLink({ uid, c, onStartTimer, onPauseTimer, canStart, target, profile }: {
+  uid: string; c: CardioLogState; onStartTimer: () => void; onPauseTimer: () => void; canStart: boolean; profile?: Profile;
   /** valori previsti nella fase in corso (o nel piano continuo) */
   target?: Pick<CardioPhase, 'speedKmh' | 'inclinePct' | 'resistance' | 'rpm'> | null;
 }) {
@@ -56,7 +57,7 @@ export function MachineLink({ uid, c, onStartTimer, canStart, target }: {
           <Bluetooth size={16} /> {busy ? 'Ricerca…' : c.machine ? 'Ricollega l’attrezzo' : `Collega ${c.plan.machine === 'bike' ? 'la cyclette' : 'il tapis roulant'}`}
         </button>
         <p className="tiny muted" style={{ marginTop: 6 }}>
-          {c.plan.machine === 'bike' ? 'Accendi la cyclette e scegli “iConsole…”' : 'Accendi il tapis roulant e scegli “FS-…”'} nella lista. I dati vengono solo letti: l’app non comanda l’attrezzo.
+          {c.plan.machine === 'bike' ? 'Accendi la cyclette e scegli “iConsole…”' : 'Accendi il tapis roulant e scegli “FS-…”'} nella lista. Dopo potrai anche comandarlo dall’app.
         </p>
         {err && <p className="tiny" style={{ color: 'var(--danger)', marginTop: 4 }}>{err}</p>}
       </div>
@@ -82,7 +83,7 @@ export function MachineLink({ uid, c, onStartTimer, canStart, target }: {
       ]
     : [
         { label: 'Velocità', value: L.speedKmh, digits: 1, unit: 'km/h', target: target?.speedKmh, tol: 0.05 },
-        { label: 'Inclinazione', value: L.inclinePct, digits: 1, unit: '%', target: target?.inclinePct, tol: 0 },
+        { label: 'Inclinazione', value: L.inclinePct, digits: 1, unit: '%', target: target?.inclinePct, tol: 0, zeroOk: true },
       ];
 
   const totals: [string, string, string?][] = [
@@ -134,7 +135,9 @@ export function MachineLink({ uid, c, onStartTimer, canStart, target }: {
         </div>
       )}
 
-      {live && s.moving && !c.timer.running && !c.done && (
+      {live && <MachineControl profile={profile} timerRunning={c.timer.running} onStopTimer={onPauseTimer} />}
+
+      {live && s.moving && !c.timer.running && !c.done && s.control.status !== 'on' && (
         <div className="banner mp-banner">
           <span className="grow">Ti stai allenando ma il timer è fermo.</span>
           <button className="btn sm primary" onClick={onStartTimer} disabled={!canStart}><Play size={14} fill="currentColor" /> Avvia timer</button>
@@ -144,26 +147,29 @@ export function MachineLink({ uid, c, onStartTimer, canStart, target }: {
   );
 }
 
-type Hero = { label: string; value?: number; digits: number; unit: string; target?: number | null; tol: number };
+type Hero = { label: string; value?: number; digits: number; unit: string; target?: number | null; tol: number; zeroOk?: boolean };
 
 /** Dato principale: numero grande e confronto con l'obiettivo (in linea, sotto, sopra). */
 function HeroMetric({ h }: { h: Hero }) {
   const has = h.value != null;
   let state: 'ok' | 'low' | 'high' | '' = '';
-  if (has && h.target != null && h.target > 0) {
-    const margin = Math.max(h.tol * h.target, h.digits ? 0.05 : 0.5);
-    state = h.value! < h.target - margin ? 'low' : h.value! > h.target + margin ? 'high' : 'ok';
+  const tg = h.target ?? 0;
+  const hasTarget = h.target != null && (tg > 0 || !!h.zeroOk);
+  if (has && hasTarget) {
+    const margin = Math.max(h.tol * tg, h.digits ? 0.05 : 0.5);
+    state = h.value! < tg - margin ? 'low' : h.value! > tg + margin ? 'high' : 'ok';
   }
-  const pct = has && h.target ? Math.max(0, Math.min(1, h.value! / (h.target * 1.5))) : 0;
+  const scale = Math.max(tg * 1.5, h.zeroOk ? 4 : 1);
+  const pct = has ? Math.max(0, Math.min(1, h.value! / scale)) : 0;
   return (
     <div className={`mp-metric ${state}`}>
       <span className="l">{h.label}</span>
       <span className="v">{has ? fmtN(h.value!, h.digits) : '–'}<small>{h.unit}</small></span>
-      {h.target != null && h.target > 0 ? (
+      {hasTarget ? (
         <>
-          <span className="gauge" aria-hidden><i style={{ width: `${pct * 100}%` }} /><b style={{ left: `${(1 / 1.5) * 100}%` }} /></span>
+          <span className="gauge" aria-hidden><i style={{ width: `${pct * 100}%` }} /><b style={{ left: `${(tg / scale) * 100}%` }} /></span>
           <span className="t">
-            Obiettivo {fmtN(h.target, h.digits)}{state === 'ok' ? ' · in linea' : state === 'low' ? ' · aumenta' : state === 'high' ? ' · riduci' : ''}
+            Obiettivo {fmtN(tg, h.digits)}{state === 'ok' ? ' · in linea' : state === 'low' ? ' · aumenta' : state === 'high' ? ' · riduci' : ''}
           </span>
         </>
       ) : <span className="t muted">Nessun obiettivo</span>}

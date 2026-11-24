@@ -66,16 +66,21 @@ describe('Bluetooth nativo (app iPhone)', () => {
     expect(dev.gatt.connected).toBe(false);
   });
 
-  it('non espone alcun metodo di scrittura (nessun comando agli attrezzi)', async () => {
+  it('scrive solo sul Control Point FTMS, mai sulle altre caratteristiche', async () => {
     const bt = getBluetooth()!;
     const dev = await bt.requestDevice({ acceptAllDevices: true });
     const server = await dev.gatt.connect();
     const [svc] = await server.getPrimaryServices();
-    for (const c of await svc.getCharacteristics()) {
+    const chars = await svc.getCharacteristics();
+    for (const c of chars) {
       expect(c.writeValue).toBeUndefined();
-      expect(c.writeValueWithResponse).toBeUndefined();
       expect(c.writeValueWithoutResponse).toBeUndefined();
+      if (c.uuid === '00002ad9-0000-1000-8000-00805f9b34fb') expect(typeof c.writeValueWithResponse).toBe('function');
+      else expect(c.writeValueWithResponse).toBeUndefined();
     }
     expect(calls).not.toContain('WRITE');
+    const cp = chars.find((c: any) => c.uuid.startsWith('00002ad9'));
+    await cp.writeValueWithResponse(new Uint8Array([0x00]));
+    expect(calls).toContain('WRITE');
   });
 });

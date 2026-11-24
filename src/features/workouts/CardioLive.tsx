@@ -15,8 +15,9 @@ import { formatClock, fmtN, round, vibrate } from '@/lib/util';
 import type { CardioActual, CardioIntensity, CardioLogState, ExerciseLog, Profile } from '@/lib/types';
 import { CardioIcon, CardioPlanLines } from './cardio-ui';
 import { FTMS_MACHINES, MachineLink } from './MachineLink';
-import { liveMachineSummary } from '@/lib/ble/ftms';
+import { getFtmsState, liveMachineSummary, stopFtms } from '@/lib/ble/ftms';
 import { hasMachineData } from '@/lib/ftms-live';
+import { useMachineAutopilot } from './useMachineAutopilot';
 
 function tone(high = false) {
   try {
@@ -73,9 +74,17 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
     return () => window.clearInterval(id);
   }, [ex.uid]);
 
+  // con i comandi attivi, timer e fasi guidano l'attrezzo
+  useMachineAutopilot({
+    uid: ex.uid, plan, running: c.timer.running, phase: pos.finished ? null : pos.phase, phaseIndex: pos.index, finished: pos.finished && started,
+    onMachineStopped: () => { const cur = latest.current.c; if (cur.timer.running) latest.current.onChange({ ...cur, timer: pauseTimer(cur.timer) }); },
+  });
+
   const machineNow = () => liveMachineSummary(ex.uid) ?? c.machine ?? null;
   const pause = () => onChange({ ...c, timer: pauseTimer(c.timer) });
   function openResult() {
+    const fs = getFtmsState();
+    if (fs.ownerUid === ex.uid && fs.control.status === 'on' && fs.control.running) void stopFtms();
     const t = pauseTimer(c.timer);
     const machine = machineNow();
     if (c.timer.running || (machine && machine !== c.machine)) onChange({ ...c, timer: t, machine });
@@ -121,7 +130,7 @@ export function CardioLive({ ex, profile, onChange, onStart, onMenu, sessionPaus
           <div style={{ marginTop: 8 }}><Bar value={Math.min(elapsedSec, total)} max={Math.max(1, total)} color="var(--blue)" /></div>
           {pos.finished && started && <div className="banner" style={{ marginTop: 8 }}><CheckCircle2 size={18} /><span>Durata prevista raggiunta. Puoi continuare o premere <b>Termina</b> per registrare i valori.</span></div>}
 
-          {FTMS_MACHINES.includes(plan.machine) && <MachineLink uid={ex.uid} c={c} onStartTimer={onStart} canStart={!sessionPaused} target={pos.phase ?? plan} />}
+          {FTMS_MACHINES.includes(plan.machine) && <MachineLink uid={ex.uid} c={c} profile={profile} onStartTimer={onStart} onPauseTimer={pause} canStart={!sessionPaused} target={pos.phase ?? plan} />}
 
           {plan.mode === 'intervals' ? (
             <>
