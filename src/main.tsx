@@ -15,7 +15,10 @@ if (import.meta.env.PROD && !native && 'serviceWorker' in navigator && window.is
 
 // Aggiornamenti: un'app installata o lasciata aperta non ricarica da sola. All'avvio e ogni volta che torna
 // in primo piano controlla version.json; se è uscita una build nuova ricarica la pagina (una volta sola per build).
-if (import.meta.env.PROD && !native) {
+// Vale anche per l'app iPhone, che carica il sito (server.url): senza questo controllo la WebView può tenere
+// in cache la pagina vecchia per diversi minuti. Si ricarica con ?v=<build> per scavalcare la cache HTTP.
+const remote = /^https?:$/.test(location.protocol) && !/^(localhost|capacitor)/.test(location.hostname);
+if (import.meta.env.PROD && (!native || remote)) {
   const check = async () => {
     try {
       const r = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -24,7 +27,9 @@ if (import.meta.env.PROD && !native) {
       if (!build || build === __BUILD_ID__) return;
       if (sessionStorage.getItem('forma-reloaded-for') === build) return;
       sessionStorage.setItem('forma-reloaded-for', build);
-      location.reload();
+      const u = new URL(location.href);
+      u.searchParams.set('v', build);
+      location.replace(u.toString());
     } catch { /* offline */ }
   };
   window.addEventListener('load', check);
