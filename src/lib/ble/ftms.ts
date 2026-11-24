@@ -358,7 +358,7 @@ export async function takeFtmsControl(spec?: MachineSpec): Promise<boolean> {
   const r = await enqueue(cmd.requestControl());
   if (!r.ok) { setControl({ status: 'error', error: r.message, limits }); return false; }
   setControl({ status: 'on', error: null, limits, targets: {}, running: false, lastEvent: null });
-  logLine(`limiti: velocità ${limits.speed.min}–${limits.speed.max} km/h, pendenza ${limits.incline.min}–${limits.incline.max}%${speed ? ` (tapis ${speed.min}–${speed.max})` : ''}`);
+  logLine(`limiti: velocità ${limits.speed.min}–${limits.speed.max} km/h, pendenza ${limits.incline.min}–${limits.incline.max}%${speed ? ` (tapis ${speed.min}–${speed.max}, unità ${speed.perKmh === 10 ? '0,1' : '0,01'} km/h)` : ''}`);
   return true;
 }
 
@@ -405,7 +405,7 @@ export async function setFtmsSpeed(kmh: number, retry = false): Promise<number |
   if (!retry) resent = false;
   overSince = null;
   setControl({ targets: { ...state.control.targets, speed: v } });
-  const r = await enqueue(cmd.speed(v));
+  const r = await enqueue(cmd.speed(v, state.control.limits!.speed.perKmh ?? 100));
   if (!r.ok) setControl({ error: r.message });
   return r.ok ? v : null;
 }

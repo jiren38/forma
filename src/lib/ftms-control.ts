@@ -35,8 +35,8 @@ export const cmd = {
   start: () => bytes(OP.startResume),
   stop: () => bytes(OP.stopPause, 0x01),
   pause: () => bytes(OP.stopPause, 0x02),
-  /** km/h, risoluzione 0,01 */
-  speed: (kmh: number) => bytes(OP.setSpeed, ...u16(Math.round(kmh * 100))),
+  /** km/h, risoluzione 0,01 secondo FTMS; `perKmh` = 10 per i tapis che usano 0,1 km/h (vedi parseRange) */
+  speed: (kmh: number, perKmh = 100) => bytes(OP.setSpeed, ...u16(Math.round(kmh * perKmh))),
   /** %, risoluzione 0,1 */
   incline: (pct: number) => bytes(OP.setIncline, ...s16(Math.round(pct * 10))),
   /** livello, risoluzione 0,1 (uint8 nella FTMS 1.0) */
@@ -66,14 +66,20 @@ export function parseMachineStatus(dv: DataView): MachineEvent {
   }
 }
 
-export interface Range { min: number; max: number; step: number }
+export interface Range { min: number; max: number; step: number; /** solo velocità: unità per km/h usate dall'attrezzo (100 = FTMS, 10 = 0,1 km/h) */ perKmh?: number }
 
 /** Supported Speed (0x2AD4, uint16 /100), Inclination (0x2AD5, sint16 /10), Resistance (0x2AD6, sint16 /10). */
 export function parseRange(kind: 'speed' | 'incline' | 'resistance', dv: DataView): Range | null {
   if (dv.byteLength < 6) return null;
-  const sc = kind === 'speed' ? 100 : 10;
+  // Alcuni tapis (FitShow, es. TFK 495) dichiarano e leggono la velocità in 0,1 km/h invece che
+  // in 0,01: un massimo sotto i 5 km/h non è plausibile, quindi si passa a 0,1 km/h. Così 5 km/h
+  // diventano 50 e non 500 (che il tapis legge come 50 km/h e porta al massimo).
+  let sc = kind === 'speed' ? 100 : 10;
+  if (kind === 'speed' && dv.getUint16(2, true) < 500) sc = 10;
   const rd = (o: number) => (kind === 'speed' ? dv.getUint16(o, true) : dv.getInt16(o, true)) / sc;
-  const r = { min: rd(0), max: rd(2), step: dv.getUint16(4, true) / sc };
+  const step = dv.getUint16(4, true) / sc;
+  const r: Range = { min: rd(0), max: rd(2), step: kind === 'speed' ? Math.min(step || 0.1, 0.1) : step };
+  if (kind === 'speed') r.perKmh = sc;
   return r.max > r.min ? r : null;
 }
 

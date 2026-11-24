@@ -29,9 +29,17 @@ describe('pacchetti dei comandi', () => {
   });
   it('legge gli intervalli supportati', () => {
     // velocità 0,8–16 km/h passo 0,1
-    expect(parseRange('speed', dv(80, 0, 0x40, 0x06, 10, 0))).toEqual({ min: 0.8, max: 16, step: 0.1 });
+    expect(parseRange('speed', dv(80, 0, 0x40, 0x06, 10, 0))).toEqual({ min: 0.8, max: 16, step: 0.1, perKmh: 100 });
     // pendenza 0–12 % passo 1
     expect(parseRange('incline', dv(0, 0, 120, 0, 10, 0))).toEqual({ min: 0, max: 12, step: 1 });
+  });
+  it('TFK 495: velocità in 0,1 km/h (dichiara 8–160) → 5 km/h si invia come 50', () => {
+    const r = parseRange('speed', dv(8, 0, 160, 0, 1, 0))!;
+    expect(r).toEqual({ min: 0.8, max: 16, step: 0.1, perKmh: 10 });
+    const L = effectiveLimits({ maxSpeed: 12 }, { speed: r });
+    expect(L.speed).toMatchObject({ max: 12, perKmh: 10 });
+    expect(arr(cmd.speed(clampTarget(5, L.speed), L.speed.perKmh))).toEqual([0x02, 50, 0]);
+    expect(arr(cmd.speed(3.5, 10))).toEqual([0x02, 35, 0]);
   });
 });
 
