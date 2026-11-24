@@ -141,9 +141,10 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     expect(f.getFtmsState().control.status).toBe('off');
     expect(writes).toEqual([]); // collegarsi non invia nulla
     expect(await f.takeFtmsControl({ maxSpeed: 9, maxIncline: 6 })).toBe(true);
-    expect(f.getFtmsState().control).toMatchObject({ status: 'on', limits: { speed: { max: 9 }, incline: { max: 6 } } });
+    f.setFtmsLimits({ maxSpeed: 9, maxIncline: 6 });
+    expect(f.getFtmsState().control).toMatchObject({ status: 'on', limits: { speed: { max: f.TREADMILL_TEST_MAX_KMH }, incline: { max: 6 } } });
     expect(await f.startFtms()).toBe(true);
-    expect(await f.setFtmsSpeed(15)).toBe(9);
+    expect(await f.setFtmsSpeed(15)).toBe(6); // tetto della prova prudente
     expect(await f.setFtmsIncline(10)).toBe(6);
     expect(await f.setFtmsResistance(5)).toBeNull(); // il tapis non ha resistenza
     let stopped = false;
@@ -153,7 +154,7 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     expect(f.getFtmsState().control.running).toBe(false);
     off();
     expect(await f.stopFtms()).toBe(true);
-    expect(writes).toEqual([[0x00], [0x07], [0x02, 0x84, 0x03], [0x03, 0x3c, 0x00], [0x08, 0x01]]);
+    expect(writes).toEqual([[0x00], [0x07], [0x02, 0x58, 0x02], [0x03, 0x3c, 0x00], [0x08, 0x01]]);
     await f.disconnectFtms();
   });
 
@@ -167,17 +168,17 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     try {
       await f.connectFtms('ex1');
       await f.takeFtmsControl({ maxSpeed: 12 });
-      expect(await f.setFtmsSpeed(5)).toBe(5);
+      expect(await f.setFtmsSpeed(3)).toBe(3);
       expect(await f.startFtms()).toBe(true);
       // durante l'avvio il nastro può accelerare: nessun intervento
-      emitSpeed(12); now += 3000; emitSpeed(12);
+      emitSpeed(6.5); now += 3000; emitSpeed(6.5);
       expect(writes.filter((w) => w[0] === 0x08)).toEqual([]);
-      // a regime è ancora a 12 km/h invece di 5: si ripete la velocità
-      now += 8000; emitSpeed(12); now += 3000; emitSpeed(12); now += 3000; emitSpeed(12);
+      // a regime è ancora a 6,5 km/h invece di 3: si ripete la velocità
+      now += 8000; emitSpeed(6.5); now += 3000; emitSpeed(6.5); now += 3000; emitSpeed(6.5);
       await new Promise((r) => setTimeout(r, 20));
-      expect(writes[writes.length - 1]).toEqual([0x02, 0xf4, 0x01]);
+      expect(writes[writes.length - 1]).toEqual([0x02, 0x2c, 0x01]);
       // continua: STOP
-      now += 12000; emitSpeed(12); now += 3000; emitSpeed(12); now += 3000; emitSpeed(12);
+      now += 12000; emitSpeed(6.5); now += 3000; emitSpeed(6.5); now += 3000; emitSpeed(6.5);
       await new Promise((r) => setTimeout(r, 20));
       expect(writes[writes.length - 1]).toEqual([0x08, 0x01]);
       expect(f.getFtmsState().control.error).toMatch(/fermato per sicurezza/);

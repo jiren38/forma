@@ -328,7 +328,16 @@ async function readRange(kind: keyof typeof RANGE_CHARS): Promise<Range | null> 
  * velocità massima e lo STOP automatico non lo ha fermato. Finché non è chiarito, il tapis si
  * usa solo in lettura. La cyclette resta comandabile.
  */
-let treadmillControlSuspended = true;
+let treadmillControlSuspended = false;
+/**
+ * Prova prudente dopo la correzione delle unità (PR #23): il tapis non supera mai questa velocità,
+ * qualunque limite scelga l'utente. Da togliere quando l'utente conferma che la velocità è giusta.
+ */
+export const TREADMILL_TEST_MAX_KMH = 6;
+function capTreadmill<T extends { speed: { max: number } }>(l: T): T {
+  if (state.kind === 'treadmill') l.speed = { ...l.speed, max: Math.min(l.speed.max, TREADMILL_TEST_MAX_KMH) };
+  return l;
+}
 export const TREADMILL_SUSPENDED_MSG = 'Comandi del tapis sospesi per sicurezza: usa la console del tapis. I dati restano visibili qui.';
 export const isTreadmillControlSuspended = () => treadmillControlSuspended;
 /** solo per i test */
@@ -355,6 +364,7 @@ export async function takeFtmsControl(spec?: MachineSpec): Promise<boolean> {
   }
   const [speed, incline, resistance] = [await readRange('speed'), await readRange('incline'), await readRange('resistance')];
   const limits = effectiveLimits(spec, { speed, incline, resistance });
+  capTreadmill(limits);
   const r = await enqueue(cmd.requestControl());
   if (!r.ok) { setControl({ status: 'error', error: r.message, limits }); return false; }
   setControl({ status: 'on', error: null, limits, targets: {}, running: false, lastEvent: null });
@@ -365,7 +375,7 @@ export async function takeFtmsControl(spec?: MachineSpec): Promise<boolean> {
 /** Aggiorna i limiti (es. l'utente li cambia durante l'allenamento). */
 export function setFtmsLimits(spec?: MachineSpec) {
   if (!state.control.limits) return;
-  setControl({ limits: effectiveLimits(spec, { speed: state.control.limits.speed, incline: state.control.limits.incline, resistance: state.control.limits.resistance }) });
+  setControl({ limits: capTreadmill(effectiveLimits(spec, { speed: state.control.limits.speed, incline: state.control.limits.incline, resistance: state.control.limits.resistance })) });
 }
 
 const controlling = () => state.control.status === 'on' && !!state.control.limits && !(state.kind === 'treadmill' && treadmillControlSuspended);
