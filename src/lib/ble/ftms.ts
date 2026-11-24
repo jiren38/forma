@@ -324,10 +324,22 @@ async function readRange(kind: keyof typeof RANGE_CHARS): Promise<Range | null> 
 }
 
 /**
+ * Comandi del tapis SOSPESI (2026-11-24): sul TFK 495 l'avvio dall'app porta il nastro alla
+ * velocità massima e lo STOP automatico non lo ha fermato. Finché non è chiarito, il tapis si
+ * usa solo in lettura. La cyclette resta comandabile.
+ */
+let treadmillControlSuspended = true;
+export const TREADMILL_SUSPENDED_MSG = 'Comandi del tapis sospesi per sicurezza: usa la console del tapis. I dati restano visibili qui.';
+export const isTreadmillControlSuspended = () => treadmillControlSuspended;
+/** solo per i test */
+export function __setTreadmillControlSuspended(v: boolean) { treadmillControlSuspended = v; }
+
+/**
  * Prende il controllo dell'attrezzo (Request Control). Da chiamare solo dopo che l'utente ha
  * confermato le avvertenze di sicurezza. `spec` = limiti scelti dall'utente nel profilo.
  */
 export async function takeFtmsControl(spec?: MachineSpec): Promise<boolean> {
+  if (state.kind === 'treadmill' && treadmillControlSuspended) { setControl({ status: 'error', error: TREADMILL_SUSPENDED_MSG }); return false; }
   if (!cpChar || state.status !== 'connected') { setControl({ status: 'error', error: 'Collega prima l’attrezzo.' }); return false; }
   setControl({ status: 'requesting', error: null });
   try {
@@ -356,7 +368,7 @@ export function setFtmsLimits(spec?: MachineSpec) {
   setControl({ limits: effectiveLimits(spec, { speed: state.control.limits.speed, incline: state.control.limits.incline, resistance: state.control.limits.resistance }) });
 }
 
-const controlling = () => state.control.status === 'on' && !!state.control.limits;
+const controlling = () => state.control.status === 'on' && !!state.control.limits && !(state.kind === 'treadmill' && treadmillControlSuspended);
 
 export async function startFtms(): Promise<boolean> {
   if (!controlling()) return false;

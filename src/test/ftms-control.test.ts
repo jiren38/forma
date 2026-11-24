@@ -81,6 +81,19 @@ describe('percorsi', () => {
 });
 
 describe('flusso dei comandi (attrezzo simulato)', () => {
+  it('comandi del tapis sospesi: nessun comando inviato', async () => {
+    const { writes } = fakeTreadmill();
+    const f = await import('@/lib/ble/ftms');
+    f.__resetFtms();
+    f.__setTreadmillControlSuspended(true);
+    await f.connectFtms('ex1');
+    expect(await f.takeFtmsControl({ maxSpeed: 9 })).toBe(false);
+    expect(await f.startFtms()).toBe(false);
+    expect(await f.setFtmsSpeed(5)).toBeNull();
+    expect(writes).toEqual([]);
+    await f.disconnectFtms();
+  });
+
   afterEach(() => { delete (navigator as any).bluetooth; });
 
   function fakeTreadmill(opts: { refuse?: boolean } = {}) {
@@ -115,6 +128,7 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     const { writes, emitStatus } = fakeTreadmill();
     const f = await import('@/lib/ble/ftms');
     f.__resetFtms();
+    f.__setTreadmillControlSuspended(false);
     expect(await f.connectFtms('ex1')).toBe(true);
     expect(f.getFtmsState().control.status).toBe('off');
     expect(writes).toEqual([]); // collegarsi non invia nulla
@@ -139,6 +153,7 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     const { writes, emitSpeed } = fakeTreadmill();
     const f = await import('@/lib/ble/ftms');
     f.__resetFtms();
+    f.__setTreadmillControlSuspended(false);
     let now = 1_000_000;
     const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     try {
@@ -166,6 +181,7 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     const { writes, emitSpeed } = fakeTreadmill();
     const f = await import('@/lib/ble/ftms');
     f.__resetFtms();
+    f.__setTreadmillControlSuspended(false);
     let now = 2_000_000;
     const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     try {
@@ -183,6 +199,7 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     const { writes } = fakeTreadmill({ refuse: true });
     const f = await import('@/lib/ble/ftms');
     f.__resetFtms();
+    f.__setTreadmillControlSuspended(false);
     await f.connectFtms('ex1');
     expect(await f.takeFtmsControl()).toBe(false);
     expect(f.getFtmsState().control.status).toBe('error');
