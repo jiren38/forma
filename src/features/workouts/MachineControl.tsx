@@ -71,6 +71,12 @@ export function MachineControl({ profile, onStopTimer, timerRunning }: { profile
       {kind === 'treadmill' && (
         <button className="btn mp-stop" onClick={stop}><OctagonX size={22} /> STOP</button>
       )}
+      {ctl.log.length > 0 && (
+        <details className="mp-log" style={{ marginTop: 10 }}>
+          <summary className="tiny muted" style={{ cursor: 'pointer' }}>Registro comandi ({ctl.log.length})</summary>
+          <pre className="tiny" style={{ whiteSpace: 'pre-wrap', margin: '6px 0 0', maxHeight: 220, overflow: 'auto', fontSize: 11 }}>{ctl.log.slice().reverse().join('\n')}</pre>
+        </details>
+      )}
       {kind === 'treadmill' && (ctl.running || timerRunning) && createPortal(
         <button className="mp-stop-fab" onClick={stop} aria-label="STOP tapis roulant"><OctagonX size={26} /><span>STOP</span></button>,
         document.body,
