@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { Gauge, Minus, Mountain, OctagonX, Plus, ShieldCheck, SlidersHorizontal, Zap } from 'lucide-react';
 import { Sheet, NumberInput } from '@/components/ui';
 import {
-  releaseFtmsControl, setFtmsIncline, setFtmsLimits, setFtmsResistance, setFtmsSpeed, stopFtms, takeFtmsControl, useFtms,
+  isTreadmillControlSuspended, releaseFtmsControl, setFtmsIncline, setFtmsLimits, setFtmsResistance, setFtmsSpeed, stopFtms, takeFtmsControl, useFtms,
 } from '@/lib/ble/ftms';
 import { DEFAULT_LIMITS } from '@/lib/ftms-control';
 import { patchProfile } from '@/app/data';
@@ -20,6 +20,9 @@ export function MachineControl({ profile, onStopTimer, timerRunning }: { profile
   const kind = s.kind ?? 'treadmill';
   const ctl = s.control;
   if (ctl.status === 'unavailable') return null;
+  if (kind === 'treadmill' && isTreadmillControlSuspended()) {
+    return <p className="tiny muted" style={{ marginTop: 8 }}>Comandi del tapis dall’app sospesi per sicurezza: avvia, regola e ferma il tapis dalla sua console. I dati restano visibili qui.</p>;
+  }
 
   async function stop() {
     await stopFtms();
