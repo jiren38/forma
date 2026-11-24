@@ -24,8 +24,10 @@ export async function applyPhaseTargets(phase: Pick<CardioPhase, 'speedKmh' | 'i
   if (s.kind === 'treadmill') {
     const sp = phase?.speedKmh ?? plan.speedKmh;
     const inc = phase?.inclinePct ?? plan.inclinePct;
-    if (sp != null && sp > 0) await setFtmsSpeed(sp);
+    // prima la pendenza e poi la velocità: sul TFK 495 un cambio di pendenza subito dopo la
+    // velocità può annullare il nuovo obiettivo di velocità
     if (inc != null) await setFtmsIncline(inc);
+    if (sp != null && sp > 0) await setFtmsSpeed(sp);
   } else if (s.kind === 'bike') {
     const r = phase?.resistance ?? plan.resistance;
     if (r != null && r > 0) await setFtmsResistance(r);

@@ -186,6 +186,25 @@ describe('flusso dei comandi (attrezzo simulato)', () => {
     } finally { spy.mockRestore(); await f.disconnectFtms(); }
   });
 
+  it('il nastro non cambia velocità → ripete il comando al massimo 2 volte', async () => {
+    const { writes, emitSpeed } = fakeTreadmill();
+    const f = await import('@/lib/ble/ftms');
+    f.__resetFtms();
+    f.__setTreadmillControlSuspended(false);
+    let now = 3_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      await f.connectFtms('ex1');
+      await f.takeFtmsControl({ maxSpeed: 12 });
+      await f.startFtms();
+      await f.setFtmsSpeed(4.5);
+      for (let i = 0; i < 60; i++) { now += 1000; emitSpeed(3.5); await new Promise((r) => setTimeout(r, 2)); }
+      const speeds = writes.filter((w) => w[0] === 0x02);
+      expect(speeds).toEqual([[0x02, 0xc2, 0x01], [0x02, 0xc2, 0x01], [0x02, 0xc2, 0x01]]);
+      expect(writes.some((w) => w[0] === 0x08)).toBe(false);
+    } finally { spy.mockRestore(); await f.disconnectFtms(); }
+  });
+
   it('alla velocità giusta il controllo non interviene', async () => {
     const { writes, emitSpeed } = fakeTreadmill();
     const f = await import('@/lib/ble/ftms');
