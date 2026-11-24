@@ -234,13 +234,29 @@ let lastSpeedCmd = { at: 0, from: 0 };
 let overSince: number | null = null;
 let resent = false;
 const OVER_KMH = 2;
+// Il TFK 495 a volte risponde "ok" a un cambio di velocità ma il nastro non cambia: se dopo il tempo
+// di adeguamento la velocità non corrisponde, si ripete il comando (al massimo 2 volte per obiettivo).
+let offSince: number | null = null;
+let adjustTries = 0;
+const OFF_KMH = 0.4;
+const MAX_ADJUST = 2;
 
 function speedWatchdog(now: number) {
   const c = state.control;
   const v = state.live.speedKmh;
   const target = c.targets.speed;
-  if (state.kind !== 'treadmill' || c.status !== 'on' || !c.running || v == null || target == null || target <= 0) { overSince = null; return; }
+  if (state.kind !== 'treadmill' || c.status !== 'on' || !c.running || v == null || target == null || target <= 0) { overSince = null; offSince = null; return; }
   const settle = 4000 + Math.abs(target - lastSpeedCmd.from) * 1500;
+  // velocità diversa dall'obiettivo (ma non pericolosa): si ripete il comando
+  if (Math.abs(v - target) > OFF_KMH && v > 0 && now - lastSpeedCmd.at >= settle && adjustTries < MAX_ADJUST && !(v > target + OVER_KMH)) {
+    offSince ??= now;
+    if (now - offSince >= 3000) {
+      offSince = null;
+      adjustTries++;
+      logLine(`il nastro non ha raggiunto ${target} km/h, ripeto il comando (${adjustTries}/${MAX_ADJUST})`);
+      void setFtmsSpeed(target, true);
+    }
+  } else if (Math.abs(v - target) <= OFF_KMH) offSince = null;
   const overLimit = !!c.limits && v > c.limits.speed.max + 1;
   const overTarget = v > target + OVER_KMH && v > target * 1.3;
   if (!(overLimit || overTarget) || (!overLimit && now - lastSpeedCmd.at < settle) || now - lastSpeedCmd.at < 2500) { overSince = null; return; }
@@ -412,7 +428,7 @@ export async function setFtmsSpeed(kmh: number, retry = false): Promise<number |
   if (!controlling() || state.kind !== 'treadmill') return null;
   const v = clampTarget(kmh, state.control.limits!.speed);
   lastSpeedCmd = { at: Date.now(), from: state.live.speedKmh ?? 0 };
-  if (!retry) resent = false;
+  if (!retry) { resent = false; adjustTries = 0; offSince = null; }
   overSince = null;
   setControl({ targets: { ...state.control.targets, speed: v } });
   const r = await enqueue(cmd.speed(v, state.control.limits!.speed.perKmh ?? 100));
