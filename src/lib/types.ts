@@ -56,6 +56,8 @@ export interface Profile {
   equipmentSetAt?: string;
   /** Caratteristiche delle macchine cardio dell'utente (es. livelli di resistenza della cyclette). */
   cardioMachines?: Partial<Record<CardioMachine, MachineSpec>>;
+  /** percorsi cardio creati dall'utente (vedi lib/routes.ts) */
+  cardioRoutes?: import('./routes').CustomRoute[];
 }
 
 // ---- Cardio integrato nelle schede ----

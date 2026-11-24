@@ -35,6 +35,8 @@ const ProductPage = lazy(() => import('@/features/nutrition/ProductPage'));
 const EnergyPage = lazy(() => import('@/features/energy/EnergyPage'));
 const BodyPage = lazy(() => import('@/features/body/BodyPage'));
 const CardioPage = lazy(() => import('@/features/cardio/CardioPage'));
+const RoutesPage = lazy(() => import('@/features/cardio/RoutesPage'));
+const RouteEditor = lazy(() => import('@/features/cardio/RouteEditor'));
 const WellnessPage = lazy(() => import('@/features/wellness/WellnessPage'));
 const CoachPage = lazy(() => import('@/features/coach/CoachPage'));
 const GoalsPage = lazy(() => import('@/features/goals/GoalsPage'));
@@ -94,6 +96,8 @@ function Shell() {
             <Route path="/energy" element={<EnergyPage />} />
             <Route path="/body" element={<BodyPage />} />
             <Route path="/cardio" element={<CardioPage />} />
+            <Route path="/cardio/routes" element={<RoutesPage />} />
+            <Route path="/cardio/routes/edit/:id" element={<RouteEditor />} />
             <Route path="/wellness" element={<WellnessPage />} />
             <Route path="/coach" element={<CoachPage />} />
             <Route path="/goals" element={<GoalsPage />} />

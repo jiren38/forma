@@ -143,7 +143,7 @@ export function expandPhases(plan: CardioPlan): CardioPhase[] {
   const out: CardioPhase[] = [];
   if (plan.warmup && plan.warmup.durationSec > 0) out.push(plan.warmup);
   const n = Math.max(1, plan.repeat ?? 1);
-  for (let r = 0; r < n; r++) for (const ph of plan.cycle) out.push({ ...ph, uid: `${ph.uid}_${r}`, label: `${ph.label || PHASE_LABEL[ph.kind]} · ${r + 1}/${n}` });
+  for (let r = 0; r < n; r++) for (const ph of plan.cycle) out.push({ ...ph, uid: `${ph.uid}_${r}`, label: n > 1 ? `${ph.label || PHASE_LABEL[ph.kind]} · ${r + 1}/${n}` : ph.label || PHASE_LABEL[ph.kind] });
   if (plan.cooldown && plan.cooldown.durationSec > 0) out.push(plan.cooldown);
   return out;
 }
