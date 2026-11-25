@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Check, Copy, Footprints, HeartPulse, Info, Moon, RefreshCw, Scale, Smartphone, Zap } from 'lucide-react';
 import { useMeta } from '@/app/data';
-import { PageHeader, Segmented, Loading, useToast } from '@/components/ui';
+import { PageHeader, Segmented, Loading, Switch, useToast } from '@/components/ui';
 import { isNativeApp } from '@/lib/native';
 import { HEALTH_SHORTCUT_NAME, NATIVE_HEALTH_URL, WEB_HEALTH_URL, runShortcutUrl } from '@/lib/health';
 import { fmtN } from '@/lib/util';
-import { importHealthUrl } from './HealthBridge';
+import { importHealthUrl, healthAutoEnabled, setHealthAuto } from './HealthBridge';
 
 function when(iso: string) {
   const d = new Date(iso), now = new Date();
@@ -68,6 +68,7 @@ export default function HealthPage() {
   const h = meta.health;
   const [mode, setMode] = useState<'app' | 'web'>(isNativeApp() ? 'app' : 'web');
   const [lang, setLang] = useState<Lang>(deviceLang);
+  const [auto, setAuto] = useState(healthAutoEnabled);
   const t = UI[lang];
   const base = mode === 'app' ? NATIVE_HEALTH_URL : WEB_HEALTH_URL;
   const s = h?.summary;
@@ -145,12 +146,21 @@ export default function HealthPage() {
 
       <section className="card stack-sm">
         <div className="card-title" style={{ margin: 0 }}><h3><Zap size={18} /> Aggiornamento automatico</h3></div>
+        {isNativeApp() && (
+          <>
+            <div className="row-between" style={{ gap: 12 }}>
+              <span><b className="small">Aggiorna quando apri Forma</b><div className="tiny muted">Forma avvia da sola il comando (al massimo una volta all’ora): vedi Comandi per un attimo e poi torni qui con i dati.</div></span>
+              <Switch label="Aggiorna quando apri Forma" checked={auto} onChange={(v) => { setHealthAuto(v); setAuto(v); }} />
+            </div>
+            <p className="hint">È il modo più semplice. In alternativa puoi usare un’automazione di {t.app}, che lavora senza far vedere il passaggio:</p>
+          </>
+        )}
         <ol className="steps">
-          <li><span>In {t.app} apri <b>{t.automation}</b> › <b>+</b> › <b>App</b>.</span></li>
+          <li><span>In {t.app} apri <b>{t.automation}</b> e tocca <b>+</b> in alto a destra, poi <b>{lang === 'it' ? 'Crea automazione personale' : 'Create Personal Automation'}</b> se compare, e scegli il trigger <b>App</b>.</span></li>
           <li><span>Scegli <b>Forma</b>, spunta <b>{t.isOpened}</b> e seleziona <b>{t.runNow}</b>.</span></li>
           <li><span>Come azione scegli il comando <b>{HEALTH_SHORTCUT_NAME}</b>.</span></li>
         </ol>
-        <p className="hint">Da quel momento ogni volta che apri Forma i dati si aggiornano da soli in un paio di secondi. Puoi aggiungere anche un’automazione <b>{t.timeOfDay}</b> (es. ogni mattina alle 9).</p>
+        <p className="hint">Puoi aggiungere anche un’automazione <b>{t.timeOfDay}</b> (es. ogni mattina alle 9).</p>
       </section>
 
       <Link to="/wellness" className="btn block">Vedi passi e sonno in Benessere</Link>
