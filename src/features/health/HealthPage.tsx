@@ -140,6 +140,7 @@ export default function HealthPage() {
         {mode === 'web' && <p className="hint">Con Safari i dati vanno nella versione web; se hai l’account si sincronizzano anche nell’app. Se usi l’app iPhone scegli “App iPhone”.</p>}
         <div className="banner"><Info size={18} /><span>Consigliato: in ogni variabile data (<i>{t.start}</i>, <i>{t.end}</i>) scegli il formato <b>ISO 8601</b>. Forma capisce anche il formato normale, ma ISO evita ogni ambiguità.</span></div>
         <p className="small text-2">Prova il comando con ▶︎. La prima volta iPhone chiede di consentire l’accesso a Salute (consenti Passi, Sonno e Peso) e di aprire Forma.</p>
+        <div className="banner warn"><AlertTriangle size={18} /><span>Se compare <b>{lang === 'it' ? 'Nessun campione trovato' : 'No Samples Found'}</b>, il comando si ferma: Comandi Rapidi non sa saltare un tipo di dato vuoto. Prima controlla i permessi in Salute › il tuo profilo › {lang === 'it' ? 'App' : 'Apps'} › {t.app}, attivando Passi, Sonno e Peso. Se invece quel dato non esiste proprio (per esempio il sonno senza Apple Watch e senza orario del sonno), elimina dal comando il suo blocco: la ricerca, la ripetizione e il suo contenuto. Per il peso puoi anche allargare il filtro a 365 giorni.</span></div>
       </section>
 
       <section className="card stack-sm">
