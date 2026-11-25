@@ -60,7 +60,10 @@ export function Background() {
     if (!store.ready || !program) return;
     const tpls = templates.filter((t) => program.schedule.includes(t.id));
     const existing = new Set(suggestions.map((s) => s.id));
+    // con la progressione automatica attiva gli aumenti vengono proposti direttamente all'avvio della seduta
+    const auto = settings.training?.autoProgression !== false;
     for (const a of progressionAdvice(tpls, sessions, profile)) {
+      if (auto) continue;
       const s = adviceToSuggestion(a);
       if (existing.has(s.id)) continue;
       // non riproporre se la scheda ha già quel carico

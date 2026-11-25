@@ -1,6 +1,7 @@
 import type { ExerciseLog, MuscleGroup, PRRecord, WorkoutSession } from './types';
 import { getExercise } from '@/data/exercises';
 import { dayKey, startOfWeek, addDays, sum } from './util';
+import { sessionRecords } from './records';
 
 /** 1RM stimato (Epley), limitato a 12 ripetizioni per affidabilità. */
 export function e1rm(weight: number, reps: number) {
@@ -69,7 +70,7 @@ export function personalRecords(sessions: WorkoutSession[], exerciseId: string, 
     if (beforeIso && s.startedAt >= beforeIso) continue;
     for (const ex of s.exercises.filter((e) => e.exerciseId === exerciseId)) {
       let vol = 0;
-      for (const st of doneSets(ex)) {
+      for (const st of doneSets(ex).filter((x) => x.type !== 'warmup')) {
         const w = st.weight ?? 0, r = st.reps ?? 0;
         vol += w * r;
         if (w > 0 && (!pr.weight || w > pr.weight.value)) pr.weight = { value: w, reps: r, date: s.startedAt };
@@ -83,30 +84,9 @@ export function personalRecords(sessions: WorkoutSession[], exerciseId: string, 
   return pr;
 }
 
-/** Confronta la sessione con lo storico precedente e restituisce i nuovi record. */
+/** Confronta la sessione con lo storico precedente e restituisce i nuovi record (uno per esercizio, vedi lib/records). */
 export function detectPRs(sessions: WorkoutSession[], session: WorkoutSession): PRRecord[] {
-  const prs: PRRecord[] = [];
-  const ids = Array.from(new Set(session.exercises.map((e) => e.exerciseId)));
-  for (const id of ids) {
-    const ex = getExercise(id);
-    const before = personalRecords(sessions.filter((s) => s.id !== session.id), id, session.startedAt);
-    const sets = session.exercises.filter((e) => e.exerciseId === id).flatMap(doneSets);
-    if (!sets.length) continue;
-    const hasHistory = !!(before.weight || before.reps);
-    if (!hasHistory) continue; // la prima volta non è un record
-    let bw = 0, bwReps = 0, be = 0, br = 0, vol = 0;
-    for (const st of sets) {
-      const w = st.weight ?? 0, r = st.reps ?? 0;
-      if (w > bw) { bw = w; bwReps = r; }
-      be = Math.max(be, e1rm(w, r)); br = Math.max(br, r); vol += w * r;
-    }
-    const weighted = ex?.tracking === 'weight_reps';
-    if (weighted && bw > (before.weight?.value ?? 0)) prs.push({ exerciseId: id, kind: 'weight', value: bw, reps: bwReps, date: session.startedAt, sessionId: session.id });
-    else if (weighted && be > (before.e1rm?.value ?? 0) * 1.0001) prs.push({ exerciseId: id, kind: 'e1rm', value: Math.round(be * 10) / 10, date: session.startedAt, sessionId: session.id });
-    if (!weighted && br > (before.reps?.value ?? 0)) prs.push({ exerciseId: id, kind: 'reps', value: br, date: session.startedAt, sessionId: session.id });
-    if (weighted && vol > (before.volume?.value ?? 0) && !prs.some((p) => p.exerciseId === id)) prs.push({ exerciseId: id, kind: 'volume', value: vol, date: session.startedAt, sessionId: session.id });
-  }
-  return prs;
+  return sessionRecords(sessions, session);
 }
 
 export function weeklyCounts(sessions: WorkoutSession[], weeks = 12) {

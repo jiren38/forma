@@ -3,13 +3,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { BarChart3, CalendarRange, Trophy, Flame, Clock, CalendarCheck, Dumbbell, TrendingUp, TrendingDown, Scale, Ruler, Camera, History } from 'lucide-react';
 import { SectionHero } from '@/design/SectionHero';
 import { useProfile, useSessions, useSettings } from '@/app/data';
-import { completedSessions, consistencyGrid, exerciseHistory, monthlyCounts, muscleSets, personalRecords, streaks, weeklyCounts } from '@/lib/stats';
+import { completedSessions, consistencyGrid, exerciseHistory, monthlyCounts, muscleSets, streaks, weeklyCounts } from '@/lib/stats';
+import { recentRecords, recordBook, recordDeltaText, recordValueText, recordsPerMonth } from '@/lib/records';
 import { averageSessionMinutes, exerciseTrend } from '@/lib/insights';
 import { Empty, Segmented, Bar } from '@/components/ui';
 import { BarChart, Heatmap, LineChart } from '@/components/charts';
 import { getExercise } from '@/data/exercises';
 import { MUSCLE_LABEL } from '@/lib/labels';
-import { fmtN, fmtW, formatShortDate, toDisplayWeight } from '@/lib/util';
+import { addDays, fmtN, fmtW, formatShortDate, toDisplayWeight } from '@/lib/util';
 import type { MuscleGroup } from '@/lib/types';
 import CardioProgress, { useCardioEntries } from './CardioProgress';
 
@@ -182,35 +183,74 @@ function Muscles({ sessions }: { sessions: ReturnType<typeof useSessions> }) {
 }
 
 function Records({ sessions, units }: { sessions: ReturnType<typeof useSessions>; units: 'kg' | 'lb' }) {
-  const ids = Array.from(new Set(completedSessions(sessions).flatMap((s) => s.exercises.filter((e) => e.sets.some((x) => x.done)).map((e) => e.exerciseId)))).filter((id) => getExercise(id));
-  const recent = completedSessions(sessions).flatMap((s) => (s.prs ?? []).map((p) => ({ ...p, name: s.name }))).reverse().slice(0, 15);
+  const fw = (kg: number) => fmtW(kg, units);
+  const [sort, setSort] = useState<'recent' | 'strength'>('recent');
+  const done = completedSessions(sessions);
+  const recent = recentRecords(sessions, 40);
+  const since30 = addDays(new Date(), -30).toISOString();
+  const last30 = done.filter((s) => s.startedAt >= since30).reduce((a, s) => a + (s.prs?.length ?? 0), 0);
+  const total = done.reduce((a, s) => a + (s.prs?.length ?? 0), 0);
+  const months = recordsPerMonth(sessions, 6);
+  const [showAll, setShowAll] = useState(false);
+  const books = useMemo(() => {
+    const ids = Array.from(new Set(done.flatMap((s) => s.exercises.filter((e) => !e.cardio && e.sets.some((x) => x.done && x.type !== 'warmup')).map((e) => e.exerciseId)))).filter((id) => getExercise(id));
+    return ids.map((id) => {
+      const b = recordBook(sessions, id);
+      const lastPr = recent.find((p) => p.exerciseId === id);
+      return { id, b, last: lastPr?.date ?? '', e1: b.e1rm?.value ?? 0 };
+    });
+  }, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorted = [...books].sort((x, y) => (sort === 'recent' ? y.last.localeCompare(x.last) || y.e1 - x.e1 : y.e1 - x.e1));
   return (
     <div className="stack">
-      {recent.length > 0 && (
+      <div className="rec-hero">
+        <div className="stat-tile"><div className="stat"><span className="l row" style={{ gap: 4 }}><Trophy size={13} /> Record totali</span><span className="v">{total}</span></div></div>
+        <div className="stat-tile"><div className="stat"><span className="l">Ultimi 30 giorni</span><span className="v">{last30}</span></div></div>
+        <div className="stat-tile"><div className="stat"><span className="l">Esercizi monitorati</span><span className="v">{books.length}</span></div></div>
+        <div className="stat-tile"><div className="stat"><span className="l">Ultimo record</span><span className="v" style={{ fontSize: 20 }}>{recent[0] ? formatShortDate(recent[0].date) : '–'}</span>{recent[0] && <span className="tiny muted ellipsis">{getExercise(recent[0].exerciseId)?.name}</span>}</div></div>
+      </div>
+      <div className="desk-2">
+        <div className="stack">
+          <section className="card">
+            <div className="card-title"><h3><Trophy size={18} color="#ffb020" /> Record recenti</h3></div>
+            {recent.length === 0 ? <p className="small muted">I record compaiono dalla seconda volta che esegui un esercizio, quando superi il tuo miglior carico, il 1RM stimato o le ripetizioni a un certo carico.</p> : (
+              <div>
+                {(showAll ? recent : recent.slice(0, 8)).map((p, i) => {
+                  const d = recordDeltaText(p, fw);
+                  return (
+                    <Link key={i} to={`/exercises/${p.exerciseId}?tab=progress`} className="rec-row">
+                      <span className="rr-ic"><Trophy size={16} /></span>
+                      <span className="grow" style={{ minWidth: 0 }}><div className="ellipsis" style={{ fontWeight: 650 }}>{getExercise(p.exerciseId)?.name}</div><div className="tiny muted ellipsis">{recordValueText(p, fw)} · {formatShortDate(p.date)}</div></span>
+                      {d && <span className="rr-delta">{d}</span>}
+                    </Link>
+                  );
+                })}
+                {recent.length > 8 && <button className="btn sm ghost" style={{ marginTop: 6 }} onClick={() => setShowAll(!showAll)}>{showAll ? 'Mostra meno' : `Mostra tutti (${recent.length})`}</button>}
+              </div>
+            )}
+          </section>
+          <section className="card"><div className="card-title"><h3>Record al mese</h3><span className="tiny muted">ultimi 6 mesi</span></div>
+            <BarChart ariaLabel="Record personali per mese" color="#ffb020" data={months.map((m) => ({ label: m.label, value: m.count }))} highlightLast />
+          </section>
+        </div>
         <section className="card">
-          <div className="card-title"><h3><Trophy size={18} color="#ffb020" /> Record recenti</h3></div>
-          <div className="stack-sm">
-            {recent.map((p, i) => (
-              <Link key={i} to={`/session/${p.sessionId}`} className="row-between small"><span className="ellipsis" style={{ fontWeight: 600 }}>{getExercise(p.exerciseId)?.name}</span><span className="row" style={{ gap: 8 }}><span className="tiny muted">{formatShortDate(p.date)}</span><span className="pr-badge">{p.kind === 'weight' ? `${fmtW(p.value, units)} × ${p.reps}` : p.kind === 'e1rm' ? `1RM ${fmtW(p.value, units)}` : p.kind === 'reps' ? `${p.value} rip.` : `vol. ${fmtW(p.value, units)}`}</span></span></Link>
-            ))}
+          <div className="card-title"><h3>Massimali per esercizio</h3></div>
+          <Segmented label="Ordina" value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Record recenti' }, { value: 'strength', label: '1RM più alto' }]} />
+          <div style={{ marginTop: 8 }}>
+            {sorted.map(({ id, b }) => {
+              const e = getExercise(id)!;
+              const weighted = e.tracking === 'weight_reps';
+              return (
+                <Link key={id} to={`/exercises/${id}?tab=progress`} className="rec-row">
+                  <span className="grow" style={{ minWidth: 0 }}><div className="ellipsis" style={{ fontWeight: 650 }}>{e.name}</div>
+                    <div className="tiny muted ellipsis">{weighted ? `Max ${fw(b.weight?.value ?? 0)} × ${b.weight?.reps ?? 0}${b.rm[5] ? ` · 5RM ${fw(b.rm[5]!.value)}` : ''}` : e.tracking === 'time' ? `Max ${b.time?.value ?? 0} s` : `Max ${b.reps?.value ?? 0} ripetizioni`}</div></span>
+                  {weighted && b.e1rm && <span className="num" style={{ textAlign: 'right' }}><b>{fw(b.e1rm.value)}</b><div className="tiny muted">1RM st.</div></span>}
+                </Link>
+              );
+            })}
           </div>
         </section>
-      )}
-      <section className="card">
-        <div className="card-title"><h3>Migliori prestazioni per esercizio</h3></div>
-        <div className="settings-group" style={{ border: 0, padding: 0 }}>
-          {ids.map((id) => {
-            const e = getExercise(id)!;
-            const pr = personalRecords(sessions, id);
-            return (
-              <Link key={id} to={`/exercises/${id}`} className="list-item">
-                <span className="grow" style={{ minWidth: 0 }}><div className="li-title ellipsis">{e.name}</div>
-                  <div className="li-sub">{e.tracking === 'weight_reps' ? `Max ${fmtW(pr.weight?.value, units)} × ${pr.weight?.reps ?? 0} · 1RM st. ${fmtW(pr.e1rm?.value, units)}` : `Max ${pr.reps?.value ?? 0} ${e.tracking === 'time' ? 's' : 'rip.'}`}</div></span>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

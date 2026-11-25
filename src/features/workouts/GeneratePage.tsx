@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { RefreshCw, Check, AlertTriangle, Settings2, Info, Bike, Dumbbell } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Settings2, Info, Bike, Dumbbell, CalendarRange } from 'lucide-react';
 import { useProfile, useSessions, saveTemplate, saveProgram, activateProgram } from '@/app/data';
 import { PageHeader, Stepper, useToast } from '@/components/ui';
 import { generateProgram, chooseSplit, analyzeEquipment, userCardioLimit, SPLIT_NAMES, MODE_LABEL, type SplitKind } from '@/lib/generator';
@@ -10,6 +10,9 @@ import { CardioPlanLines } from './cardio-ui';
 import { getExercise } from '@/data/exercises';
 import { formatClock } from '@/lib/util';
 import { estimateMinutes } from './WorkoutsPage';
+import { BLOCK_MODELS, createBlock, mondayOf, recommendedModel } from '@/lib/periodization';
+import type { BlockModelId } from '@/lib/types';
+import { BlockTimeline, ModelPicker, WeekPreview } from './block-ui';
 
 const SPLIT_OPTIONS: SplitKind[] = ['full_body', 'upper_lower', 'ppl', 'ppl_ul', 'bro_split', 'home', 'conditioning'];
 
@@ -26,6 +29,9 @@ export default function GeneratePage() {
   const [cardioDays, setCardioDays] = useState<{ n: number; round: 'up' | 'down' } | null>(null);
   const [cardioMin, setCardioMin] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const recModel = recommendedModel(profile);
+  const [model, setModel] = useState<BlockModelId | null>(recModel);
+  const [prevWeek, setPrevWeek] = useState(0);
   const auto = chooseSplit({ ...profile, daysPerWeek: days });
   const analysis = analyzeEquipment(profile);
   const cardioOnly = analysis.mode === 'cardio_only';
@@ -46,7 +52,9 @@ export default function GeneratePage() {
     setBusy(true);
     try {
       for (const t of g.templates) await saveTemplate(t);
-      await saveProgram(g.program);
+      // programma a più settimane (non per i programmi di solo cardio, che hanno già la loro progressione)
+      const block = model && g.mode !== 'cardio_only' ? createBlock(model, mondayOf()) : null;
+      await saveProgram({ ...g.program, block, name: block ? `${g.program.name} · ${block.weeks.length} sett.` : g.program.name });
       await activateProgram(g.program.id);
       toast('Programma creato e attivato');
       nav('/workouts', { replace: true });
@@ -114,6 +122,20 @@ export default function GeneratePage() {
 
       {g.warnings.map((w, i) => <div key={i} className="banner warn"><AlertTriangle size={18} /><span>{w}</span></div>)}
       {g.notes.map((w, i) => <div key={`n${i}`} className="banner info"><Info size={18} /><span>{w}</span></div>)}
+
+      {g.mode !== 'cardio_only' && (
+        <section className="card stack-sm" aria-label="Programma a più settimane">
+          <div className="card-title"><h3><CalendarRange size={18} /> Durata e fasi</h3>{model && <span className="pill accent">{BLOCK_MODELS[model].weeks.length} settimane</span>}</div>
+          <p className="small text-2">Un programma a più settimane fa crescere volume e intensità in modo graduale e prevede una settimana di scarico per recuperare.</p>
+          <ModelPicker value={model} recommended={recModel} onChange={(m) => { setModel(m); setPrevWeek(0); }} />
+          {model && (
+            <>
+              <BlockTimeline weeks={BLOCK_MODELS[model].weeks} selected={prevWeek} onSelect={setPrevWeek} startDate={mondayOf()} />
+              <WeekPreview week={BLOCK_MODELS[model].weeks[prevWeek]} templates={g.templates} index={prevWeek} />
+            </>
+          )}
+        </section>
+      )}
 
       <div className="section-title">Anteprima · {g.program.name}
         <button className="btn sm ghost" onClick={() => setSeed((s) => s + 1)} style={{ textTransform: 'none', letterSpacing: 0 }}><RefreshCw size={15} /> Variante</button>

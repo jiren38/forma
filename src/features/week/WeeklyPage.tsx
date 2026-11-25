@@ -4,6 +4,7 @@
  * La domenica (o nei giorni successivi) si apre sulla settimana appena chiusa.
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { recordValueText } from '@/lib/records';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowDownRight, ArrowUpRight, BatteryMedium, Brain, CalendarRange, Check, ChevronLeft, ChevronRight, Droplets, Dumbbell, Equal, Flame,
@@ -226,7 +227,7 @@ function TrainingCard({ recap, units }: { recap: WeeklyRecap; units: 'kg' | 'lb'
           {T.prs.slice(0, 4).map((p, i) => (
             <Link key={i} to={`/session/${p.sessionId}`} className="wk-pr">
               <span className="ellipsis">{p.name}</span>
-              <span className="pr-badge">{p.kind === 'weight' ? `${fmtW(p.value, units)} × ${p.reps}` : p.kind === 'e1rm' ? `1RM ${fmtW(p.value, units)}` : p.kind === 'reps' ? `${p.value} rip.` : `vol. ${fmtW(p.value, units)}`}</span>
+              <span className="pr-badge">{recordValueText(p, (kg) => fmtW(kg, units))}</span>
             </Link>
           ))}
           {T.prs.length > 4 && <Link to="/progress?tab=records" className="tiny link-btn">Altri {T.prs.length - 4} record</Link>}
