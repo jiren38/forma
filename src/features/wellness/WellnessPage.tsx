@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Droplets, Moon, BatteryMedium, Brain, Smile, Activity, ChevronLeft, ChevronRight, Bell, Info, Minus, Plus, StretchHorizontal } from 'lucide-react';
-import { useCardio, useSessions, useSettings, useWellness } from '@/app/data';
+import { Droplets, Footprints, HeartPulse, RefreshCw, Moon, BatteryMedium, Brain, Smile, Activity, ChevronLeft, ChevronRight, Bell, Info, Minus, Plus, StretchHorizontal } from 'lucide-react';
+import { useCardio, useMeta, useSessions, useSettings, useWellness } from '@/app/data';
+import { runHealthShortcut } from '@/features/health/HealthPage';
 import { store } from '@/db/store';
 import { readiness } from '@/lib/insights';
 import { muscleSets, completedSessions } from '@/lib/stats';
@@ -43,11 +44,14 @@ export default function WellnessPage() {
   const wellness = useWellness();
   const sessions = useSessions();
   const cardio = useCardio();
+  const health = useMeta().health;
   const w: WellnessDay = wellness.find((x) => x.date === date) ?? { id: date, date, waterMl: 0 };
   const patch = (p: Partial<WellnessDay>) => store.put('wellness', date, { ...w, ...(store.get<WellnessDay>('wellness', date) ?? {}), ...p, id: date, date });
   const r = readiness(w, sessions, settings.sleepGoalH, cardio);
   const isToday = date === dayKey();
   const last7 = Array.from({ length: 7 }, (_, i) => { const k = dayKey(addDays(fromKey(date), i - 6)); return { k, d: wellness.find((x) => x.date === k) }; });
+  const stepDays = last7.filter((x) => x.d?.steps != null && x.k !== dayKey());
+  const stepsAvg = stepDays.length ? Math.round(stepDays.reduce((a, x) => a + (x.d!.steps ?? 0), 0) / stepDays.length) : null;
   const recent = muscleSets(sessions, 3);
   const lastSession = completedSessions(sessions).slice(-1)[0];
   const daysSince = lastSession ? Math.round((Date.now() - new Date(lastSession.startedAt).getTime()) / 86400000) : null;
@@ -107,16 +111,36 @@ export default function WellnessPage() {
             </div>
             <div style={{ marginTop: 10 }}><BarChart ariaLabel="Acqua negli ultimi 7 giorni" height={110} color="var(--blue)" data={last7.map((x) => ({ label: fromKey(x.k).toLocaleDateString('it-IT', { weekday: 'narrow' }), value: (x.d?.waterMl ?? 0) / 1000, tip: `${fmtN((x.d?.waterMl ?? 0) / 1000, 1)} L` }))} highlightLast /></div>
           </section>
+
+          {/* Passi (da Apple Salute) */}
+          <section className="card" id="w-steps">
+            <div className="card-title"><h3><Footprints size={18} color="var(--orange)" /> Passi</h3><Link to="/salute" className="link"><HeartPulse size={14} /> Apple Salute</Link></div>
+            {health || last7.some((x) => x.d?.steps) ? (
+              <>
+                <div className="row-between">
+                  <div><div className="num" style={{ fontSize: 28, fontWeight: 750 }}>{w.steps != null ? fmtN(w.steps) : '–'}</div><div className="tiny muted">{isToday ? 'finora oggi' : 'in questo giorno'}</div></div>
+                  <div style={{ textAlign: 'right' }}><div className="num" style={{ fontWeight: 700 }}>{stepsAvg != null ? fmtN(stepsAvg) : '–'}</div><div className="tiny muted">media 7 giorni</div></div>
+                </div>
+                <div style={{ marginTop: 10 }}><BarChart ariaLabel="Passi negli ultimi 7 giorni" height={110} color="var(--orange)" data={last7.map((x) => ({ label: fromKey(x.k).toLocaleDateString('it-IT', { weekday: 'narrow' }), value: x.d?.steps ?? 0, tip: x.d?.steps != null ? `${fmtN(x.d.steps)} passi` : '–' }))} highlightLast /></div>
+                {isToday && <button className="btn sm ghost block" style={{ marginTop: 8 }} onClick={runHealthShortcut}><RefreshCw size={14} /> Aggiorna da Salute</button>}
+              </>
+            ) : (
+              <div className="stack-sm">
+                <p className="small text-2">Collega Apple Salute per vedere qui i passi di ogni giorno e avere sonno e peso senza inserirli a mano.</p>
+                <Link to="/salute" className="btn sm">Collega Apple Salute</Link>
+              </div>
+            )}
+          </section>
         </div>
 
         <div className="stack">
           {/* Sonno */}
           <section className="card stack-sm" id="w-sleep">
-            <div className="card-title"><h3><Moon size={18} /> Sonno</h3><span className="tiny muted">obiettivo {settings.sleepGoalH} h</span></div>
+            <div className="card-title"><h3><Moon size={18} /> Sonno</h3>{w.sleepSource === 'health' && w.sleepHours ? <Link to="/salute" className="pill accent"><HeartPulse size={12} /> Da Apple Salute</Link> : <span className="tiny muted">obiettivo {settings.sleepGoalH} h</span>}</div>
             <div className="grid-3">
-              <div className="field"><label htmlFor="bed">A letto</label><input id="bed" type="time" className="input" value={w.bedTime ?? ''} onChange={(e) => { const h = hoursBetween(e.target.value, w.wakeTime); patch({ bedTime: e.target.value || null, ...(h ? { sleepHours: h } : {}) }); }} /></div>
-              <div className="field"><label htmlFor="wake">Sveglia</label><input id="wake" type="time" className="input" value={w.wakeTime ?? ''} onChange={(e) => { const h = hoursBetween(w.bedTime, e.target.value); patch({ wakeTime: e.target.value || null, ...(h ? { sleepHours: h } : {}) }); }} /></div>
-              <div className="field"><label>Ore</label><NumberInput value={w.sleepHours ?? null} onChange={(v) => patch({ sleepHours: v })} min={0} max={24} ariaLabel="Ore di sonno" /></div>
+              <div className="field"><label htmlFor="bed">A letto</label><input id="bed" type="time" className="input" value={w.bedTime ?? ''} onChange={(e) => { const h = hoursBetween(e.target.value, w.wakeTime); patch({ bedTime: e.target.value || null, sleepSource: 'manual', ...(h ? { sleepHours: h } : {}) }); }} /></div>
+              <div className="field"><label htmlFor="wake">Sveglia</label><input id="wake" type="time" className="input" value={w.wakeTime ?? ''} onChange={(e) => { const h = hoursBetween(w.bedTime, e.target.value); patch({ wakeTime: e.target.value || null, sleepSource: 'manual', ...(h ? { sleepHours: h } : {}) }); }} /></div>
+              <div className="field"><label>Ore</label><NumberInput value={w.sleepHours ?? null} onChange={(v) => patch({ sleepHours: v, sleepSource: 'manual' })} min={0} max={24} ariaLabel="Ore di sonno" /></div>
             </div>
             <ScaleRow label="Qualità del sonno" value={w.sleepQuality} onChange={(v) => patch({ sleepQuality: v })} low="Pessima" high="Ottima" />
             <input className="input" placeholder="Note sul sonno (risvegli, caffeina, schermi…)" value={w.sleepNotes ?? ''} onChange={(e) => patch({ sleepNotes: e.target.value })} aria-label="Note sul sonno" />

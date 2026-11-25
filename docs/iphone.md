@@ -43,3 +43,13 @@ https://github.com/jiren38/forma/releases/download/ios-latest/Forma.ipa
   chiede il permesso. In questa fase l'app legge soltanto i dati, non invia comandi agli attrezzi.
 - I link delle email (conferma account, reset password) si aprono sulla versione web: dopo, accedi nell'app con email e password.
 - Il login con Google nell'app non è disponibile (è comunque spento anche sul web).
+
+## Apple Salute (passi, sonno, peso)
+
+Con l'Apple ID gratuito l'app **non può avere il permesso HealthKit**: iloader e SideStore, con un account gratuito, abilitano solo i "gruppi di app" e scartano HealthKit dalla firma (serve l'Apple Developer Program a pagamento). Per questo i dati arrivano da **Comandi Rapidi**, che ha già accesso a Salute:
+
+1. Il comando "Forma Salute" legge passi (ultimi 7 giorni, raggruppati per giorno), sonno (ultimi 2 giorni, fasi singole) e peso (ultimi 30 giorni).
+2. Scrive una riga per campione, `passi;<inizio>;<fine>;<valore>` (idem `sonno` e `peso`), e apre `forma://salute?d=<testo codificato>` (dall'app) oppure `https://jiren38.github.io/forma/#/salute/importa?d=…` (da Safari).
+3. Forma salva tutto negli archivi esistenti: passi e sonno in Benessere (`WellnessDay.steps`, `sleepHours` con `sleepSource: 'health'`), peso in Corpo e misure (`Measurement.weightSource: 'health'`) e nel profilo. Niente doppioni: il sonno inserito a mano resta, una pesata già presente quel giorno non si duplica, le pesate già importate (anche se poi cancellate) non tornano.
+
+La guida passo passo per creare il comando e l'automazione "quando apro Forma" è nell'app: **Impostazioni › Collegamenti › Apple Salute** (`#/salute`). Lo schema `forma://` richiede l'.ipa compilato da questa versione in poi (reinstallarlo una volta con iloader › Import IPA). Logica e test: `src/lib/health.ts`, `src/test/health.test.ts`.
