@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Check, Copy, Footprints, HeartPulse, Info, Moon, RefreshCw, Scale, Smartphone, Zap } from 'lucide-react';
 import { useMeta } from '@/app/data';
-import { PageHeader, Segmented, Loading, useToast } from '@/components/ui';
+import { PageHeader, Segmented, Loading, Switch, useToast } from '@/components/ui';
 import { isNativeApp } from '@/lib/native';
 import { HEALTH_SHORTCUT_NAME, NATIVE_HEALTH_URL, WEB_HEALTH_URL, runShortcutUrl } from '@/lib/health';
 import { fmtN } from '@/lib/util';
-import { importHealthUrl } from './HealthBridge';
+import { importHealthUrl, healthAutoEnabled, setHealthAuto } from './HealthBridge';
 
 function when(iso: string) {
   const d = new Date(iso), now = new Date();
@@ -37,16 +37,39 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-const BLOCKS = [
-  { word: 'passi', type: 'Passi', filter: 'Data di inizio è negli ultimi 7 giorni', extra: <>Tocca <b>Raggruppa per</b> e scegli <b>Giorno</b> (così Salute somma iPhone e Apple Watch senza contarli due volte).</> },
-  { word: 'sonno', type: 'Sonno (Analisi del sonno)', filter: 'Data di inizio è negli ultimi 2 giorni', extra: <>Nessun raggruppamento: servono le singole fasi.</> },
-  { word: 'peso', type: 'Peso', filter: 'Data di inizio è negli ultimi 30 giorni', extra: <>Al primo collegamento puoi mettere 365 giorni per portare in Forma anche lo storico.</> },
-];
+/** Nomi di app e azioni come li mostra l'iPhone, in italiano o in inglese. */
+const UI = {
+  it: {
+    app: 'Comandi', find: 'Trova campioni di Salute', type: 'Tipo', repeat: 'Ripeti con ogni elemento', text: 'Testo', item: 'Elemento di ripetizione',
+    start: 'Data di inizio', end: 'Data di fine', value: 'Valore', addVar: 'Aggiungi alla variabile', combine: 'Combina testo', newLine: 'A capo',
+    encode: 'Codifica URL', encoded: 'Testo codificato', open: 'Apri URL', automation: 'Automazione', isOpened: 'È aperta', runNow: 'Esegui immediatamente', timeOfDay: 'Ora del giorno',
+    blocks: [
+      { word: 'passi', type: 'Passi', filter: 'Data di inizio è negli ultimi 7 giorni', group: <>Tocca <b>Raggruppa per</b> e scegli <b>Giorno</b> (così Salute somma iPhone e Apple Watch senza contarli due volte).</> },
+      { word: 'sonno', type: 'Sonno (Analisi del sonno)', filter: 'Data di inizio è negli ultimi 2 giorni', group: <>Nessun raggruppamento: servono le singole fasi.</> },
+      { word: 'peso', type: 'Peso', filter: 'Data di inizio è negli ultimi 30 giorni', group: <>Al primo collegamento puoi mettere 365 giorni per portare in Forma anche lo storico.</> },
+    ],
+  },
+  en: {
+    app: 'Shortcuts', find: 'Find Health Samples', type: 'Type', repeat: 'Repeat with Each', text: 'Text', item: 'Repeat Item',
+    start: 'Start Date', end: 'End Date', value: 'Value', addVar: 'Add to Variable', combine: 'Combine Text', newLine: 'New Lines',
+    encode: 'URL Encode', encoded: 'URL Encoded Text', open: 'Open URLs', automation: 'Automation', isOpened: 'Is Opened', runNow: 'Run Immediately', timeOfDay: 'Time of Day',
+    blocks: [
+      { word: 'passi', type: 'Steps', filter: 'Start Date is in the last 7 days', group: <>Tocca <b>Group By</b> e scegli <b>Day</b> (così Salute somma iPhone e Apple Watch senza contarli due volte).</> },
+      { word: 'sonno', type: 'Sleep (Sleep Analysis)', filter: 'Start Date is in the last 2 days', group: <>Nessun raggruppamento: servono le singole fasi.</> },
+      { word: 'peso', type: 'Weight', filter: 'Start Date is in the last 30 days', group: <>Al primo collegamento puoi mettere 365 giorni per portare in Forma anche lo storico.</> },
+    ],
+  },
+};
+type Lang = keyof typeof UI;
+const deviceLang = (): Lang => (typeof navigator !== 'undefined' && /^it\b/i.test(navigator.language) ? 'it' : 'en');
 
 export default function HealthPage() {
   const meta = useMeta();
   const h = meta.health;
   const [mode, setMode] = useState<'app' | 'web'>(isNativeApp() ? 'app' : 'web');
+  const [lang, setLang] = useState<Lang>(deviceLang);
+  const [auto, setAuto] = useState(healthAutoEnabled);
+  const t = UI[lang];
   const base = mode === 'app' ? NATIVE_HEALTH_URL : WEB_HEALTH_URL;
   const s = h?.summary;
 
@@ -95,35 +118,49 @@ export default function HealthPage() {
           <label>Uso Forma da</label>
           <Segmented label="Uso Forma da" value={mode} onChange={setMode} options={[{ value: 'app', label: 'App iPhone' }, { value: 'web', label: 'Safari' }]} />
         </div>
+        <div className="field">
+          <label>Lingua del tuo iPhone</label>
+          <Segmented label="Lingua del tuo iPhone" value={lang} onChange={setLang} options={[{ value: 'it', label: 'Italiano' }, { value: 'en', label: 'English' }]} />
+        </div>
         <ol className="steps">
-          <li><span>Apri <b>Comandi</b> (Comandi Rapidi), tocca <b>+</b> e chiama il comando esattamente <b>{HEALTH_SHORTCUT_NAME}</b>.</span></li>
-          {BLOCKS.map((b) => (
+          <li><span>Se non hai l’app <b>{t.app}</b> (icona viola e blu di Apple), scaricala gratis dall’App Store. Aprila, tocca <b>+</b> e chiama il comando esattamente <b>{HEALTH_SHORTCUT_NAME}</b>.</span></li>
+          {t.blocks.map((b) => (
             <li key={b.word}>
               <span>
-                Aggiungi <b>Trova campioni di Salute</b> (Find Health Samples): tipo <b>{b.type}</b>, filtro <b>{b.filter}</b>. {b.extra}<br />
-                Poi <b>Ripeti con ogni elemento</b> e, dentro la ripetizione, un’azione <b>Testo</b> con:
-                <span className="hk-line"><b>{b.word};</b><i>Data di inizio</i><b>;</b><i>Data di fine</i><b>;</b><i>Valore</i></span>
-                Le parti in corsivo sono variabili: tocca sopra la tastiera <b>Elemento di ripetizione</b>, poi toccalo di nuovo e scegli la proprietà. Sotto il Testo, sempre nella ripetizione, aggiungi <b>Aggiungi alla variabile</b> con nome <b>Dati</b>.
+                Aggiungi <b>{t.find}</b>: {t.type} <b>{b.type}</b>, filtro <b>{b.filter}</b>. {b.group}<br />
+                Poi <b>{t.repeat}</b> e, dentro la ripetizione, un’azione <b>{t.text}</b> con:
+                <span className="hk-line"><b>{b.word};</b><i>{t.start}</i><b>;</b><i>{t.end}</i><b>;</b><i>{t.value}</i></span>
+                Le parti azzurre sono variabili: tocca sopra la tastiera <b>{t.item}</b>, poi toccalo di nuovo e scegli la proprietà. Le parole <b>{b.word}</b> e i <b>;</b> si scrivono così, in italiano. Sotto il {t.text}, sempre nella ripetizione, aggiungi <b>{t.addVar}</b> con nome <b>Dati</b>.
               </span>
             </li>
           ))}
-          <li><span>Dopo le tre ripetizioni aggiungi <b>Combina testo</b>: <i>Dati</i> con <b>A capo</b>. Poi <b>Codifica URL</b> sul testo combinato.</span></li>
-          <li><span>Per finire <b>Apri URL</b> con l’indirizzo qui sotto seguito dalla variabile <i>Testo codificato</i>:</span></li>
+          <li><span>Dopo le tre ripetizioni aggiungi <b>{t.combine}</b>: <i>Dati</i> con <b>{t.newLine}</b>. Poi <b>{t.encode}</b> sul testo combinato.</span></li>
+          <li><span>Per finire <b>{t.open}</b> con l’indirizzo qui sotto seguito dalla variabile <i>{t.encoded}</i>:</span></li>
         </ol>
-        <CopyField label="Indirizzo da mettere in Apri URL" value={base} />
+        <CopyField label={`Indirizzo da mettere in ${t.open}`} value={base} />
         {mode === 'web' && <p className="hint">Con Safari i dati vanno nella versione web; se hai l’account si sincronizzano anche nell’app. Se usi l’app iPhone scegli “App iPhone”.</p>}
-        <div className="banner"><Info size={18} /><span>Consigliato: in ogni variabile data (<i>Data di inizio</i>, <i>Data di fine</i>) scegli il formato <b>ISO 8601</b>. Forma capisce anche il formato normale, ma ISO evita ogni ambiguità.</span></div>
+        <div className="banner"><Info size={18} /><span>Consigliato: in ogni variabile data (<i>{t.start}</i>, <i>{t.end}</i>) scegli il formato <b>ISO 8601</b>. Forma capisce anche il formato normale, ma ISO evita ogni ambiguità.</span></div>
         <p className="small text-2">Prova il comando con ▶︎. La prima volta iPhone chiede di consentire l’accesso a Salute (consenti Passi, Sonno e Peso) e di aprire Forma.</p>
+        <div className="banner warn"><AlertTriangle size={18} /><span>Se compare <b>{lang === 'it' ? 'Nessun campione trovato' : 'No Samples Found'}</b>, il comando si ferma: Comandi Rapidi non sa saltare un tipo di dato vuoto. Prima controlla i permessi in Salute › il tuo profilo › {lang === 'it' ? 'App' : 'Apps'} › {t.app}, attivando Passi, Sonno e Peso. Se invece quel dato non esiste proprio (per esempio il sonno senza Apple Watch e senza orario del sonno), elimina dal comando il suo blocco: la ricerca, la ripetizione e il suo contenuto. Per il peso puoi anche allargare il filtro a 365 giorni.</span></div>
       </section>
 
       <section className="card stack-sm">
         <div className="card-title" style={{ margin: 0 }}><h3><Zap size={18} /> Aggiornamento automatico</h3></div>
+        {isNativeApp() && (
+          <>
+            <div className="row-between" style={{ gap: 12 }}>
+              <span><b className="small">Aggiorna quando apri Forma</b><div className="tiny muted">Forma avvia da sola il comando (al massimo una volta all’ora): vedi Comandi per un attimo e poi torni qui con i dati.</div></span>
+              <Switch label="Aggiorna quando apri Forma" checked={auto} onChange={(v) => { setHealthAuto(v); setAuto(v); }} />
+            </div>
+            <p className="hint">È il modo più semplice. In alternativa puoi usare un’automazione di {t.app}, che lavora senza far vedere il passaggio:</p>
+          </>
+        )}
         <ol className="steps">
-          <li><span>In Comandi apri <b>Automazione</b> › <b>+</b> › <b>App</b>.</span></li>
-          <li><span>Scegli <b>Forma</b>, spunta <b>È aperta</b> e seleziona <b>Esegui immediatamente</b>.</span></li>
+          <li><span>In {t.app} apri <b>{t.automation}</b> e tocca <b>+</b> in alto a destra, poi <b>{lang === 'it' ? 'Crea automazione personale' : 'Create Personal Automation'}</b> se compare, e scegli il trigger <b>App</b>.</span></li>
+          <li><span>Scegli <b>Forma</b>, spunta <b>{t.isOpened}</b> e seleziona <b>{t.runNow}</b>.</span></li>
           <li><span>Come azione scegli il comando <b>{HEALTH_SHORTCUT_NAME}</b>.</span></li>
         </ol>
-        <p className="hint">Da quel momento ogni volta che apri Forma i dati si aggiornano da soli in un paio di secondi. Puoi aggiungere anche un’automazione <b>Ora del giorno</b> (es. ogni mattina alle 9).</p>
+        <p className="hint">Puoi aggiungere anche un’automazione <b>{t.timeOfDay}</b> (es. ogni mattina alle 9).</p>
       </section>
 
       <Link to="/wellness" className="btn block">Vedi passi e sonno in Benessere</Link>
