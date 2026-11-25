@@ -371,6 +371,8 @@ export interface WellnessDay {
   soreness?: Partial<Record<MuscleGroup, number>>; // 0-3
   mood?: number | null;
   recoveryNotes?: string;
+  /** Voci del riepilogo giornaliero saltate per questo giorno (es. colazione saltata). */
+  dailySkip?: string[];
 }
 
 // ---- AI / coach ----

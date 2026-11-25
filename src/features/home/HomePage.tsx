@@ -22,6 +22,7 @@ import { store } from '@/db/store';
 import { SyncBadge } from '@/components/sync-badge';
 import { EnergyCard } from '@/features/energy/EnergyCard';
 import { ArtPanel } from '@/design/Art';
+import { DailySummary } from './DailySummary';
 
 function greeting() {
   const h = new Date().getHours();
@@ -209,6 +210,8 @@ export default function HomePage() {
           <ChevronRight />
         </button>
       )}
+
+      <DailySummary onStartWorkout={(id) => void start(id)} />
 
       <div className="home-grid">
         <div className="stack home-main">
