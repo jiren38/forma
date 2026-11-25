@@ -33,6 +33,7 @@ const CatalogAddPage = lazy(() => import('@/features/nutrition/CatalogAddPage'))
 const ScannerPage = lazy(() => import('@/features/nutrition/ScannerPage'));
 const ProductPage = lazy(() => import('@/features/nutrition/ProductPage'));
 const EnergyPage = lazy(() => import('@/features/energy/EnergyPage'));
+const WeeklyPage = lazy(() => import('@/features/week/WeeklyPage'));
 const BodyPage = lazy(() => import('@/features/body/BodyPage'));
 const CardioPage = lazy(() => import('@/features/cardio/CardioPage'));
 const RoutesPage = lazy(() => import('@/features/cardio/RoutesPage'));
@@ -94,6 +95,7 @@ function Shell() {
             <Route path="/nutrition/product/:code" element={<ProductPage />} />
             <Route path="/nutrition/scanned" element={<ProductsPage />} />
             <Route path="/energy" element={<EnergyPage />} />
+            <Route path="/week" element={<WeeklyPage />} />
             <Route path="/body" element={<BodyPage />} />
             <Route path="/cardio" element={<CardioPage />} />
             <Route path="/cardio/routes" element={<RoutesPage />} />

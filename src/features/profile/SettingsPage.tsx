@@ -104,7 +104,7 @@ export default function SettingsPage() {
         )}
         <Row title="Giorni di riposo" sub="Ricorda il recupero dopo più giorni consecutivi di allenamento"><Switch label="Promemoria riposo" checked={n.restDays} onChange={(v) => enableNotif({ restDays: v })} /></Row>
         <Row title="Nuovi record personali"><Switch label="Notifiche record" checked={n.prs} onChange={(v) => enableNotif({ prs: v })} /></Row>
-        <Row title="Riepilogo settimanale" sub="Ogni lunedì, con allenamenti, volume e record"><Switch label="Riepilogo settimanale" checked={n.weeklySummary} onChange={(v) => enableNotif({ weeklySummary: v })} /></Row>
+        <Row title="Riepilogo settimanale" sub="Domenica dalle 18: allenamenti, calorie, sonno e peso a confronto con la settimana prima"><Switch label="Riepilogo settimanale" checked={n.weeklySummary} onChange={(v) => enableNotif({ weeklySummary: v })} /></Row>
       </div>
       <p className="hint">I promemoria funzionano mentre l’app è aperta o installata e attiva in background. Le notifiche push con app chiusa richiedono un servizio push dedicato (vedi documentazione).</p>
 
