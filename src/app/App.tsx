@@ -10,6 +10,7 @@ import AuthPage from '@/features/auth/AuthPage';
 import Onboarding from '@/features/onboarding/Onboarding';
 import HomePage from '@/features/home/HomePage';
 import { setNativeStatusBar } from '@/lib/native';
+import { HealthBridge } from '@/features/health/HealthBridge';
 
 const ExplorePage = lazy(() => import('@/features/explore/ExplorePage'));
 const WorkoutsPage = lazy(() => import('@/features/workouts/WorkoutsPage'));
@@ -47,6 +48,8 @@ const EditProfile = lazy(() => import('@/features/profile/EditProfile'));
 const EquipmentPage = lazy(() => import('@/features/profile/EquipmentPage'));
 const SettingsPage = lazy(() => import('@/features/profile/SettingsPage'));
 const PrivacyPage = lazy(() => import('@/features/profile/PrivacyPage'));
+const HealthPage = lazy(() => import('@/features/health/HealthPage'));
+const HealthImportRoute = lazy(() => import('@/features/health/HealthPage').then((m) => ({ default: m.HealthImportRoute })));
 const BluetoothDiagnostics = lazy(() => import('@/features/diagnostics/bluetooth/BluetoothDiagnostics'));
 
 function ThemeSync() {
@@ -109,12 +112,15 @@ function Shell() {
             <Route path="/profile/equipment" element={<EquipmentPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/salute" element={<HealthPage />} />
+            <Route path="/salute/importa" element={<HealthImportRoute />} />
             <Route path="/diagnostics/bluetooth" element={<BluetoothDiagnostics />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>
       {!immersive && <BottomNav />}
+      <HealthBridge />
       <Background />
     </div>
   );

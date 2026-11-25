@@ -72,6 +72,8 @@ jobs:
           grep -q '"url": "https://jiren38.github.io/forma/"' "$APP/capacitor.config.json" || { echo "Manca server.url per gli aggiornamenti automatici"; exit 1; }
           /usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          # schema forma:// usato da Comandi Rapidi per passare i dati di Apple Salute
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$APP/Info.plist")" = "forma" || { echo "Manca lo schema forma://"; exit 1; }
           grep -c "rerlqjukqfofrkodgura" "$APP"/public/assets/*.js | grep -v ':0' || { echo "Supabase non configurato nella build"; exit 1; }
           du -sh "$APP" "$APP/public"
       - uses: actions/upload-artifact@v4

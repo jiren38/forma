@@ -33,6 +33,9 @@ export default function BodyPage() {
   const first = (k: Metric) => ms.find((m) => m[k] != null);
 
   async function saveM(m: Measurement) {
+    // un peso importato da Apple Salute corretto a mano diventa un dato manuale
+    const prev = store.get<Measurement>('measurements', m.id);
+    if (prev?.weightSource === 'health' && prev.weightKg !== m.weightKg) m = { ...m, weightSource: 'manual' };
     await store.put('measurements', m.id, m);
     const lastW = [...store.list<Measurement>('measurements')].filter((x) => x.weightKg).sort((a, b) => a.date.localeCompare(b.date)).pop();
     if (lastW?.weightKg && lastW.weightKg !== profile.weightKg) await patchProfile({ weightKg: lastW.weightKg });
@@ -72,7 +75,7 @@ export default function BodyPage() {
                 <div key={m.id} className="list-item" style={{ cursor: 'default' }}>
                   <span className="li-icon"><Ruler size={18} /></span>
                   <span className="grow" style={{ minWidth: 0 }}>
-                    <div className="li-title">{formatShortDate(m.date)}{m.weightKg ? ` · ${fmtW(m.weightKg, units)}` : ''}</div>
+                    <div className="li-title">{formatShortDate(m.date)}{m.weightKg ? ` · ${fmtW(m.weightKg, units)}` : ''}{m.weightSource === 'health' && <span className="pill accent" style={{ marginLeft: 6, fontSize: 11, padding: '1px 7px' }}>Salute</span>}</div>
                     <div className="li-sub ellipsis">{METRICS.filter((x) => x.key !== 'weightKg' && m[x.key] != null).map((x) => `${x.label} ${fmtN(m[x.key] as number, 1)}${x.unit === '%' ? '%' : ''}`).join(' · ') || (m.notes ? m.notes : 'Solo peso')}</div>
                   </span>
                   <button className="icon-btn ghost" onClick={() => setEdit({ ...m })} aria-label="Modifica misurazione"><Pencil size={16} /></button>
