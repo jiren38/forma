@@ -5,6 +5,18 @@ import type {
   Recipe, SavedMeal, Settings, Suggestion, WellnessDay, WorkoutSession, WorkoutTemplate,
 } from '@/lib/types';
 import { uid } from '@/lib/util';
+import type { HealthImportSummary } from '@/lib/health';
+
+export interface HealthMeta {
+  lastImportAt: string;
+  summary: HealthImportSummary | null;
+  /** pesate fino a questo istante già importate (le cancellate a mano non tornano) */
+  weightCursor: string | null;
+  /** messaggio se l'ultima importazione non conteneva dati leggibili */
+  error?: string | null;
+  /** righe non riconosciute dell'ultima importazione (esempi) */
+  invalid?: string[];
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   units: 'kg', theme: 'dark', restDefaultSec: 90,
@@ -14,7 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 /** Articolo aggiunto a mano o da un prodotto (foodId) alla lista della spesa. */
 export interface ShoppingExtra { id: string; name: string; foodId?: string; brand?: string; imageUrl?: string }
-export interface Meta { favorites: string[]; recent: string[]; favoriteFoods: string[]; recentFoods: string[]; shoppingChecked: string[]; shoppingExtra?: ShoppingExtra[]; /** Alimenti del database generico salvati tra i miei prodotti (gli altri usano Food.savedAt). */ savedFoods?: string[]; lastSummaryWeek?: string; lastReminder?: Record<string, string> }
+export interface Meta { favorites: string[]; recent: string[]; favoriteFoods: string[]; recentFoods: string[]; shoppingChecked: string[]; shoppingExtra?: ShoppingExtra[]; /** Alimenti del database generico salvati tra i miei prodotti (gli altri usano Food.savedAt). */ savedFoods?: string[]; lastSummaryWeek?: string; lastReminder?: Record<string, string>; /** Ultima importazione da Apple Salute (Comandi Rapidi). */ health?: HealthMeta }
 const DEFAULT_META: Meta = { favorites: [], recent: [], favoriteFoods: [], recentFoods: [], shoppingChecked: [] };
 
 export function useProfile(): Profile | undefined { return useCollection<Profile>('profile').find((p: any) => p.id === 'me'); }

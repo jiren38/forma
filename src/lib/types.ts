@@ -414,6 +414,8 @@ export interface Measurement {
   hipsCm?: number | null;
   bodyFatPct?: number | null;
   notes?: string;
+  /** 'health' se il peso è stato importato da Apple Salute. */
+  weightSource?: 'manual' | 'health';
 }
 
 export interface ProgressPhoto {
@@ -457,6 +459,10 @@ export interface WellnessDay {
   recoveryNotes?: string;
   /** Voci del riepilogo giornaliero saltate per questo giorno (es. colazione saltata). */
   dailySkip?: string[];
+  /** Passi del giorno, importati da Apple Salute (Comandi Rapidi). */
+  steps?: number | null;
+  /** Da dove viene il sonno: 'health' = Apple Salute (si aggiorna da solo), altrimenti inserito a mano. */
+  sleepSource?: 'manual' | 'health';
 }
 
 // ---- AI / coach ----

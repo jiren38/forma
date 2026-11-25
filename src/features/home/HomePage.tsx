@@ -24,6 +24,7 @@ import { SyncBadge } from '@/components/sync-badge';
 import { EnergyCard } from '@/features/energy/EnergyCard';
 import { ArtPanel } from '@/design/Art';
 import { DailySummary } from './DailySummary';
+import { WeeklyCard } from '@/features/week/WeeklyCard';
 
 function greeting() {
   const h = new Date().getHours();
@@ -214,6 +215,7 @@ export default function HomePage() {
       )}
 
       <DailySummary onStartWorkout={(id) => void start(id)} />
+      <WeeklyCard />
 
       <div className="home-grid">
         <div className="stack home-main">
@@ -234,7 +236,10 @@ export default function HomePage() {
           <section className="card" aria-label="Calendario settimanale">
             <div className="card-title">
               <h3><CalendarDays size={18} /> La tua settimana</h3>
-              <Link to="/history" className="link">Storico <ChevronRight size={16} /></Link>
+              <span className="row" style={{ gap: 2 }}>
+                <Link to="/history" className="link">Storico</Link>
+                <Link to={`/week?w=${dayKey(ws)}`} className="link">Riepilogo <ChevronRight size={16} /></Link>
+              </span>
             </div>
             <div className="week">
               {week.map((d) => (

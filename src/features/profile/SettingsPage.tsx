@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, Upload, RefreshCw, LogOut, Trash2, Cloud, HardDrive, FileSpreadsheet, Bell, Shield, Import, Bluetooth, Dumbbell } from 'lucide-react';
+import { Download, Upload, RefreshCw, LogOut, Trash2, Cloud, HardDrive, FileSpreadsheet, Bell, Shield, Import, Bluetooth, HeartPulse, Dumbbell } from 'lucide-react';
 import { trainingPrefs } from '@/features/workouts/session';
-import { useSettings, patchSettings, useSessions } from '@/app/data';
+import { useSettings, patchSettings, useSessions, useMeta } from '@/app/data';
 import { useAuth } from '@/app/auth';
 import { store, ALL_COLLECTIONS, type CollectionName } from '@/db/store';
 import { syncEngine } from '@/db/sync';
@@ -15,6 +15,7 @@ import { dayKey, downloadFile, formatClock, fmtN } from '@/lib/util';
 import type { Settings } from '@/lib/types';
 
 export default function SettingsPage() {
+  const health = useMeta().health;
   const toast = useToast();
   const s = useSettings();
   const tp = trainingPrefs(s);
@@ -117,7 +118,7 @@ export default function SettingsPage() {
         )}
         <Row title="Giorni di riposo" sub="Ricorda il recupero dopo più giorni consecutivi di allenamento"><Switch label="Promemoria riposo" checked={n.restDays} onChange={(v) => enableNotif({ restDays: v })} /></Row>
         <Row title="Nuovi record personali"><Switch label="Notifiche record" checked={n.prs} onChange={(v) => enableNotif({ prs: v })} /></Row>
-        <Row title="Riepilogo settimanale" sub="Ogni lunedì, con allenamenti, volume e record"><Switch label="Riepilogo settimanale" checked={n.weeklySummary} onChange={(v) => enableNotif({ weeklySummary: v })} /></Row>
+        <Row title="Riepilogo settimanale" sub="Domenica dalle 18: allenamenti, calorie, sonno e peso a confronto con la settimana prima"><Switch label="Riepilogo settimanale" checked={n.weeklySummary} onChange={(v) => enableNotif({ weeklySummary: v })} /></Row>
       </div>
       <p className="hint">I promemoria funzionano mentre l’app è aperta o installata e attiva in background. Le notifiche push con app chiusa richiedono un servizio push dedicato (vedi documentazione).</p>
 
@@ -137,6 +138,11 @@ export default function SettingsPage() {
         <Row icon={<Upload size={18} />} title="Ripristina da backup" sub="Unisce i dati del file a quelli attuali"><button className="btn sm" disabled={busy} onClick={() => file.current?.click()}>Importa</button></Row>
         <input ref={file} type="file" accept="application/json,.json" hidden onChange={(e) => importJson(e.target.files?.[0])} />
         <Link to="/privacy" className="list-item"><span className="li-icon"><Shield size={18} /></span><span className="grow"><div className="li-title">Privacy e dati</div></span></Link>
+      </div>
+
+      <div className="section-title">Collegamenti</div>
+      <div className="settings-group">
+        <Link to="/salute" className="list-item"><span className="li-icon"><HeartPulse size={18} /></span><span className="grow"><div className="li-title">Apple Salute</div><div className="li-sub">{health ? `Passi, sonno e peso · aggiornato ${new Date(health.lastImportAt).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Passi, sonno e peso in automatico da iPhone'}</div></span></Link>
       </div>
 
       <div className="section-title">Strumenti sperimentali</div>

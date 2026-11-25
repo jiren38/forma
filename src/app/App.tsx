@@ -10,6 +10,7 @@ import AuthPage from '@/features/auth/AuthPage';
 import Onboarding from '@/features/onboarding/Onboarding';
 import HomePage from '@/features/home/HomePage';
 import { setNativeStatusBar } from '@/lib/native';
+import { HealthBridge } from '@/features/health/HealthBridge';
 
 const ExplorePage = lazy(() => import('@/features/explore/ExplorePage'));
 const WorkoutsPage = lazy(() => import('@/features/workouts/WorkoutsPage'));
@@ -33,6 +34,7 @@ const CatalogAddPage = lazy(() => import('@/features/nutrition/CatalogAddPage'))
 const ScannerPage = lazy(() => import('@/features/nutrition/ScannerPage'));
 const ProductPage = lazy(() => import('@/features/nutrition/ProductPage'));
 const EnergyPage = lazy(() => import('@/features/energy/EnergyPage'));
+const WeeklyPage = lazy(() => import('@/features/week/WeeklyPage'));
 const BodyPage = lazy(() => import('@/features/body/BodyPage'));
 const CardioPage = lazy(() => import('@/features/cardio/CardioPage'));
 const RoutesPage = lazy(() => import('@/features/cardio/RoutesPage'));
@@ -46,6 +48,8 @@ const EditProfile = lazy(() => import('@/features/profile/EditProfile'));
 const EquipmentPage = lazy(() => import('@/features/profile/EquipmentPage'));
 const SettingsPage = lazy(() => import('@/features/profile/SettingsPage'));
 const PrivacyPage = lazy(() => import('@/features/profile/PrivacyPage'));
+const HealthPage = lazy(() => import('@/features/health/HealthPage'));
+const HealthImportRoute = lazy(() => import('@/features/health/HealthPage').then((m) => ({ default: m.HealthImportRoute })));
 const BluetoothDiagnostics = lazy(() => import('@/features/diagnostics/bluetooth/BluetoothDiagnostics'));
 
 function ThemeSync() {
@@ -94,6 +98,7 @@ function Shell() {
             <Route path="/nutrition/product/:code" element={<ProductPage />} />
             <Route path="/nutrition/scanned" element={<ProductsPage />} />
             <Route path="/energy" element={<EnergyPage />} />
+            <Route path="/week" element={<WeeklyPage />} />
             <Route path="/body" element={<BodyPage />} />
             <Route path="/cardio" element={<CardioPage />} />
             <Route path="/cardio/routes" element={<RoutesPage />} />
@@ -107,12 +112,15 @@ function Shell() {
             <Route path="/profile/equipment" element={<EquipmentPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/salute" element={<HealthPage />} />
+            <Route path="/salute/importa" element={<HealthImportRoute />} />
             <Route path="/diagnostics/bluetooth" element={<BluetoothDiagnostics />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>
       {!immersive && <BottomNav />}
+      <HealthBridge />
       <Background />
     </div>
   );

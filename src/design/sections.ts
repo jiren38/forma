@@ -76,6 +76,7 @@ export const SECTIONS: Record<SectionKey, Section> = {
     key: 'progress', label: 'Progressi', tagline: 'Carichi, record, peso, misure e foto', to: '/progress', icon: LineChart, color: 'var(--c-progress)',
     links: [
       { label: 'Grafici e carichi', to: '/progress' },
+      { label: 'Riepilogo settimanale', to: '/week' },
       { label: 'Record personali', to: '/progress?tab=records' },
       { label: 'Peso e misure', to: '/body' },
       { label: 'Foto progressi', to: '/body?tab=photos' },
@@ -134,6 +135,7 @@ const ROUTES: [RegExp, RouteMeta][] = [
   [/^\/nutrition\/product\//, { section: 'nutrition', crumb: 'Prodotto' }],
   [/^\/nutrition/, { section: 'nutrition', desc: 'Il diario di oggi, le calorie e i macronutrienti.' }],
   [/^\/energy/, { section: 'progress', crumb: 'Bilancio calorico' }],
+  [/^\/week/, { section: 'progress', crumb: 'Riepilogo settimanale' }],
   [/^\/body/, { section: 'progress', crumb: 'Corpo e misure', desc: 'Peso, circonferenze e foto per vedere la trasformazione nel tempo.' }],
   [/^\/progress/, { section: 'progress', desc: 'Carichi, volumi, record personali e statistiche cardio.' }],
   [/^\/goals/, { section: 'progress', crumb: 'Traguardi', desc: 'Obiettivi settimanali e mensili e i traguardi sbloccati.' }],

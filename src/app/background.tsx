@@ -9,8 +9,9 @@ import {
   useTemplates, useWellness,
 } from './data';
 import { BADGES, adviceToSuggestion, earnedBadges, progressionAdvice } from '@/lib/insights';
-import { completedSessions, sessionStats, streaks } from '@/lib/stats';
-import { addDays, dayKey, startOfWeek, weekdayIdx, fmtN } from '@/lib/util';
+import { completedSessions, streaks } from '@/lib/stats';
+import { dayKey, weekdayIdx, fmtN } from '@/lib/util';
+import { recapFresh, recapNotificationBody, recapWeekStart, weeklyRecap } from '@/lib/weekly';
 import { useProfile } from './data';
 import { backup, recoverBackup } from '@/features/workouts/session';
 import type { WorkoutSession } from '@/lib/types';
@@ -75,12 +76,12 @@ export function Background() {
   }, [doneCount, program?.id]);
 
   // Promemoria (controllo ogni minuto)
-  const ref = useRef({ settings, meta, program, sessions, wellness, measurements });
-  ref.current = { settings, meta, program, sessions, wellness, measurements };
+  const ref = useRef({ settings, meta, program, sessions, wellness, measurements, profile, templates, diary, cardio });
+  ref.current = { settings, meta, program, sessions, wellness, measurements, profile, templates, diary, cardio };
   useEffect(() => {
     const tick = () => {
       if (!store.ready) return;
-      const { settings: s, meta: m, program: p, sessions: ss, wellness: ws, measurements: ms } = ref.current;
+      const { settings: s, meta: m, program: p, sessions: ss, wellness: ws, measurements: ms, profile: pf, templates: tp, diary: dy, cardio: cd } = ref.current;
       const now = new Date();
       const today = dayKey(now);
       const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -108,12 +109,14 @@ export function Background() {
         const w = ws.find((x) => x.date === today);
         if ((w?.waterMl ?? 0) < s.waterGoalMl) fire('water', `${today}_${slot}`, { title: 'Bevi un bicchiere d’acqua', body: `Oggi: ${fmtN(w?.waterMl ?? 0)} / ${fmtN(s.waterGoalMl)} ml`, kind: 'reminder', link: '/wellness' });
       }
-      if (s.notifications.weeklySummary && weekdayIdx(now) === 0) {
-        const ws0 = addDays(startOfWeek(now), -7), we0 = startOfWeek(now);
-        const lastWeek = completedSessions(ss).filter((x) => { const d = new Date(x.startedAt); return d >= ws0 && d < we0; });
-        const vol = lastWeek.reduce((a, x) => a + sessionStats(x).volume, 0);
-        const prs = lastWeek.reduce((a, x) => a + (x.prs?.length ?? 0), 0);
-        fire('summary', dayKey(we0), { title: 'Riepilogo settimanale', body: `${lastWeek.length} allenamenti, ${fmtN(vol)} kg di volume${prs ? `, ${prs} record personali` : ''}.`, kind: 'summary', link: '/progress' });
+      // Riepilogo settimanale: domenica dalle 18 (o lunedì e martedì, se l'app non era aperta), una volta per settimana
+      if (s.notifications.weeklySummary && pf && recapFresh(now)) {
+        const start = recapWeekStart(now);
+        const wk = dayKey(start);
+        if (last.summary !== wk) {
+          const r = weeklyRecap({ now, profile: pf, settings: s, program: p, templates: tp, sessions: ss, cardio: cd, diary: dy, wellness: ws, measurements: ms }, start);
+          if (r.cur.hasData) fire('summary', wk, { title: `Riepilogo settimanale · ${r.cur.range.label}`, body: recapNotificationBody(r), kind: 'summary', link: `/week?w=${wk}` });
+        }
       }
       if (changed) patchMeta({ lastReminder: last });
     };
