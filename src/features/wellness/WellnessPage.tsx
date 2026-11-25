@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Droplets, Moon, BatteryMedium, Brain, Smile, Activity, ChevronLeft, ChevronRight, Bell, Info, Minus, Plus, StretchHorizontal } from 'lucide-react';
 import { useCardio, useSessions, useSettings, useWellness } from '@/app/data';
 import { store } from '@/db/store';
@@ -26,6 +26,19 @@ function hoursBetween(bed?: string | null, wake?: string | null) {
 export default function WellnessPage() {
   const toast = useToast();
   const [date, setDate] = useState(dayKey());
+  // apertura diretta di una sezione (dal riepilogo giornaliero in Home): ?focus=water|sleep|checkin
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const f = sp.get('focus');
+    if (!f) return;
+    const el = document.getElementById(`w-${f}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('focus-flash');
+      setTimeout(() => el.classList.remove('focus-flash'), 2200);
+    }
+    setSp({}, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const settings = useSettings();
   const wellness = useWellness();
   const sessions = useSessions();
@@ -80,7 +93,7 @@ export default function WellnessPage() {
           </section>
 
           {/* Acqua */}
-          <section className="card">
+          <section className="card" id="w-water">
             <div className="card-title"><h3><Droplets size={18} color="var(--blue)" /> Acqua</h3><Link to="/settings" className="link"><Bell size={14} /> Promemoria</Link></div>
             <div className="row" style={{ gap: 16 }}>
               <Ring value={w.waterMl} max={settings.waterGoalMl} size={96} stroke={9} color="var(--blue)"><div><div className="num" style={{ fontWeight: 700, fontSize: 18 }}>{fmtN(w.waterMl / 1000, 2)} L</div><div className="tiny muted">di {fmtN(settings.waterGoalMl / 1000, 1)} L</div></div></Ring>
@@ -98,7 +111,7 @@ export default function WellnessPage() {
 
         <div className="stack">
           {/* Sonno */}
-          <section className="card stack-sm">
+          <section className="card stack-sm" id="w-sleep">
             <div className="card-title"><h3><Moon size={18} /> Sonno</h3><span className="tiny muted">obiettivo {settings.sleepGoalH} h</span></div>
             <div className="grid-3">
               <div className="field"><label htmlFor="bed">A letto</label><input id="bed" type="time" className="input" value={w.bedTime ?? ''} onChange={(e) => { const h = hoursBetween(e.target.value, w.wakeTime); patch({ bedTime: e.target.value || null, ...(h ? { sleepHours: h } : {}) }); }} /></div>
@@ -110,7 +123,7 @@ export default function WellnessPage() {
             <BarChart ariaLabel="Ore di sonno negli ultimi 7 giorni" height={110} color="var(--accent)" data={last7.map((x) => ({ label: fromKey(x.k).toLocaleDateString('it-IT', { weekday: 'narrow' }), value: x.d?.sleepHours ?? 0, tip: x.d?.sleepHours ? `${x.d.sleepHours} h` : '–' }))} highlightLast />
           </section>
 
-          <section className="card stack">
+          <section className="card stack" id="w-checkin">
             <div className="card-title" style={{ margin: 0 }}><h3><BatteryMedium size={18} /> Come ti senti</h3></div>
             <ScaleRow icon={<BatteryMedium size={15} />} label="Energia" value={w.energy} onChange={(v) => patch({ energy: v })} low="Scarico" high="Carico" />
             <ScaleRow icon={<Brain size={15} />} label="Stress" value={w.stress} onChange={(v) => patch({ stress: v })} low="Rilassato" high="Molto stressato" />

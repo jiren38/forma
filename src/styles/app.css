@@ -1375,3 +1375,71 @@ a.card.catalog-link { display: flex; flex-direction: row; align-items: center; g
 .route-kpis > div { display: flex; flex-direction: column; align-items: center; padding: 8px; border-radius: var(--radius-sm); background: var(--surface-2); }
 .route-kpis b { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; }
 .route-kpis span { font-size: 11px; color: var(--muted); }
+
+/* ---------- Riepilogo giornaliero (Home) ---------- */
+.daily { padding: 14px 14px 12px; overflow: hidden; }
+.daily::before { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 55%); }
+.daily.all-done::before { background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--success) 10%, transparent), transparent 55%); }
+.daily-head { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 0; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; }
+.daily-count { font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: -0.02em; }
+.daily-count i { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 600; }
+.daily-text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.daily-eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.daily-text b { font-size: 16.5px; line-height: 1.2; letter-spacing: -0.01em; }
+.daily-sub { font-size: 13px; line-height: 1.35; color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.daily-toggle { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); flex-shrink: 0; transition: transform var(--dur) var(--ease); }
+.daily.open .daily-toggle { transform: rotate(180deg); }
+
+.daily-chips { position: relative; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 12px -14px 0; padding: 0 14px 2px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 28px), transparent); }
+.daily-chips::-webkit-scrollbar { display: none; }
+.daily-chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 34px; padding: 0 12px 0 10px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 650;
+  color: var(--text); background: color-mix(in srgb, var(--sc) 10%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--sc) 28%, transparent); transition: transform var(--dur-fast) var(--ease), background var(--dur); }
+.daily-chip svg { color: var(--sc); }
+:root[data-theme="light"] .daily-chip svg { color: color-mix(in srgb, var(--sc) 75%, #000); }
+.daily-chip em { font-style: normal; font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.daily-chip:hover { background: color-mix(in srgb, var(--sc) 16%, var(--surface-2)); }
+.daily-chip:active { transform: scale(.95); }
+.daily-chip.later { background: var(--surface-2); border: 1px dashed var(--border-strong); color: var(--text-2); }
+.daily-chip-done { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; height: 34px; padding: 0 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--success); background: var(--success-soft); }
+
+.daily-body { position: relative; margin-top: 12px; display: flex; flex-direction: column; gap: 12px; animation: rise .3s var(--ease) both; }
+.daily-gt { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 2px 6px; }
+.daily-gt span { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); letter-spacing: 0; }
+.daily-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.daily-row { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 2px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
+.daily-main { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 4px; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; border-radius: 10px; }
+.daily-ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; background: color-mix(in srgb, var(--sc) 15%, transparent); color: var(--sc); }
+:root[data-theme="light"] .daily-ic { color: color-mix(in srgb, var(--sc) 75%, #000); }
+.daily-lbl { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.daily-lbl b { font-size: 14.5px; }
+.daily-lbl > span:not(.daily-mini) { font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-mini { display: block; height: 3px; margin-top: 5px; border-radius: 3px; background: var(--surface-3); max-width: 160px; overflow: hidden; }
+.daily-mini i { display: block; height: 100%; border-radius: 3px; background: var(--sc); }
+.daily-go { color: var(--muted); flex-shrink: 0; }
+.daily-act { display: inline-flex; align-items: center; gap: 3px; height: 34px; padding: 0 10px; border-radius: 10px; flex-shrink: 0; cursor: pointer; font-size: 13px; font-weight: 700;
+  color: var(--text); background: color-mix(in srgb, var(--sc) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--sc) 30%, transparent); }
+.daily-skip { width: 32px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; cursor: pointer; border: 0; background: none; color: var(--muted); opacity: .6; }
+.daily-skip:hover { background: var(--surface-3); color: var(--text-2); opacity: 1; }
+.daily-done-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.daily-done { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px 0 9px; border-radius: 999px; cursor: pointer; font-size: 12.5px; color: var(--text-2); background: transparent; border: 1px solid var(--border-strong); }
+.daily-done svg { color: var(--success); }
+.daily-done b { color: var(--text); font-weight: 650; }
+.daily-done span { color: var(--muted); }
+.daily-row.later { background: transparent; border-style: dashed; }
+.daily-row.later .daily-ic { background: var(--surface-2); color: var(--muted); }
+.daily-skipped { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.daily-note { margin: 0 2px; }
+@media (min-width: 640px) {
+  .daily { padding: 16px 18px 14px; }
+  .daily-chips { margin: 12px 0 0; padding: 0; flex-wrap: wrap; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+  .daily-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .daily-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Benessere: sezione aperta dal riepilogo */
+.focus-flash { animation: focusFlash 1.6s var(--ease) .25s both; }
+@keyframes focusFlash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-wellness) 0%, transparent); } 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-wellness) 65%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
