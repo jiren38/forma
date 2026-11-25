@@ -7,17 +7,10 @@ import type { Badge, DiaryEntry, Profile, Program, Settings, Suggestion, Wellnes
 import { completedSessions, doneSets, sessionStats, exerciseHistory } from './stats';
 import { addDays, avg, dayKey, round, startOfWeek, startOfMonth } from './util';
 import { computeTargets, totals } from './nutrition';
+import { loadStep } from './progression';
 
 // ---------------- Progressione ----------------
-function increment(exId: string, weight: number): number {
-  const e = getExercise(exId);
-  if (!e) return 2.5;
-  const lower = e.primary.some((m) => ['quads', 'glutes', 'hamstrings'].includes(m));
-  if (e.equipment.includes('dumbbell') || e.equipment.includes('kettlebell')) return weight >= 20 ? 2 : 1;
-  if (e.mechanic === 'isolation' || e.kind === 'cable') return weight >= 30 ? 2.5 : 1.25;
-  if (lower && weight >= 60) return 5;
-  return 2.5;
-}
+const increment = (exId: string, weight: number) => loadStep(exId, weight);
 
 export interface ProgressionAdvice { templateId: string; uid: string; exerciseId: string; kind: 'increase' | 'reps' | 'deload' | 'hold'; title: string; body: string; patch?: { targetWeight?: number; repMin?: number; repMax?: number } }
 

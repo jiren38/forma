@@ -14,6 +14,8 @@ import { store } from '@/db/store';
 import type { MuscleGroup, Program, WorkoutTemplate } from '@/lib/types';
 import { cardioMinutesOf, templateMinutesExact } from '@/lib/cardio';
 import { sessionCardioStats } from '@/lib/cardio';
+import { BlockNow } from './block-ui';
+import { BLOCK_MODELS } from '@/lib/periodization';
 
 /** Durata stimata della scheda: pesi (serie × recupero) + durata prevista del cardio. */
 export function estimateMinutes(t: Pick<WorkoutTemplate, 'exercises'>) {
@@ -151,6 +153,7 @@ export default function WorkoutsPage() {
               <div className="card plan">
                 <div className="plan-head"><CalendarDays size={18} /><b className="ellipsis grow">{program.name}</b><span className="pill accent">{program.schedule.filter(Boolean).length} giorni</span></div>
                 {program.description && <div className="tiny muted" style={{ margin: '-4px 0 8px' }}>{program.description}</div>}
+                {program.block && <Link to={`/workouts/program/${program.id}`} style={{ display: 'block', color: 'inherit' }} aria-label="Dettagli del programma a più settimane"><BlockNow block={program.block} /></Link>}
                 <div className="plan-days">
                   {program.schedule.map((tid, i) => {
                     const t = tid ? templates.find((x) => x.id === tid) : undefined;
@@ -214,7 +217,7 @@ export default function WorkoutsPage() {
                     <span className="li-icon">{p.active ? <CheckCircle2 size={20} className="accent" /> : <CalendarDays size={20} />}</span>
                     <Link to={`/workouts/program/${p.id}`} className="grow" style={{ minWidth: 0 }}>
                       <div className="li-title ellipsis">{p.name}</div>
-                      <div className="li-sub">{p.schedule.filter(Boolean).length} giorni · {p.active ? 'Attivo' : 'Non attivo'}</div>
+                      <div className="li-sub">{p.schedule.filter(Boolean).length} giorni{p.block ? ` · ${BLOCK_MODELS[p.block.model].weeks.length} settimane` : ''} · {p.active ? 'Attivo' : 'Non attivo'}</div>
                     </Link>
                     {!p.active && <button className="btn sm" onClick={async () => { await activateProgram(p.id); toast('Programma attivato'); }}>Attiva</button>}
                     <button className="icon-btn ghost" onClick={() => setDelProg(p)} aria-label={`Elimina ${p.name}`}><Trash2 size={17} /></button>

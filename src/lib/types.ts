@@ -158,6 +158,15 @@ export interface Settings {
   nutritionOverride?: { kcal: number; protein: number; carbs: number; fat: number } | null;
   weeklyWorkoutGoal?: number;
   monthlyWorkoutGoal?: number;
+  /** Progressione dei carichi: proposta del carico all'avvio e adattamento serie per serie. */
+  training?: TrainingSettings;
+}
+
+export interface TrainingSettings {
+  /** all'avvio della seduta i carichi vengono proposti in base allo storico (default: sì) */
+  autoProgression: boolean;
+  /** durante la seduta il carico delle serie successive si adatta a ripetizioni e fatica (default: sì) */
+  liveAdjust: boolean;
 }
 
 // ---- Allenamento ----
@@ -196,6 +205,68 @@ export interface Program {
   source: 'manual' | 'generated';
   createdAt: string;
   meta?: { split?: string; goal?: Goal; level?: Level; mode?: string };
+  /** Programma a più settimane (periodizzazione): la settimana tipo cambia volume e intensità nel tempo. */
+  block?: ProgramBlock | null;
+}
+
+// ---- Periodizzazione (programmi a più settimane) ----
+export type BlockWeekKind = 'base' | 'accumulation' | 'intensification' | 'overreach' | 'peak' | 'deload';
+export type BlockModelId = 'beginner6' | 'linear4' | 'hyp6' | 'strength8';
+
+export interface BlockWeek {
+  kind: BlockWeekKind;
+  /** ripetizioni in riserva a cui puntare sulle serie allenanti */
+  rir: number;
+  /** serie in più (o in meno) per esercizio rispetto alla scheda */
+  extraSets: number;
+  /** moltiplicatore delle serie (scarico: 0.5–0.6) */
+  setsFactor: number;
+  /** moltiplicatore del carico proposto (scarico: 0.9) */
+  load: number;
+  /** spostamento del range di ripetizioni dei multiarticolari (es. −2 nelle settimane di intensificazione) */
+  repShift: number;
+}
+
+export interface ProgramBlock {
+  model: BlockModelId;
+  weeks: BlockWeek[];
+  /** lunedì della prima settimana (YYYY-MM-DD) */
+  startDate: string;
+  /** al termine riparte un nuovo ciclo con i carichi aggiornati */
+  repeat: boolean;
+  /** settimane trasformate in scarico dall'utente (indice assoluto dalla partenza) */
+  deloadOverrides?: number[];
+}
+
+/** Settimana del programma in cui è stata svolta la seduta. */
+export interface SessionBlockInfo {
+  programId: string;
+  model: BlockModelId;
+  cycle: number;
+  /** 0-based nel ciclo */
+  week: number;
+  weeks: number;
+  kind: BlockWeekKind;
+  rir: number;
+  load: number;
+}
+
+/** Obiettivo di carico calcolato per un esercizio all'avvio della seduta. */
+export interface LoadTarget {
+  kind: 'start' | 'increase' | 'reps' | 'hold' | 'decrease' | 'deload' | 'convert';
+  /** kg (null se non applicabile o prima volta senza riferimenti) */
+  weight: number | null;
+  repMin: number;
+  repMax: number;
+  rir: number | null;
+  /** spiegazione in italiano mostrata nell'app */
+  reason: string;
+  prevWeight?: number | null;
+  prevReps?: number[];
+  /** ripetizioni a cui puntare in ogni serie (doppia progressione) */
+  aimReps?: number;
+  /** più sedute di fila senza miglioramenti */
+  stalled?: boolean;
 }
 
 export interface SetLog {
@@ -207,6 +278,8 @@ export interface SetLog {
   done: boolean;
   type?: 'normal' | 'warmup' | 'drop' | 'failure';
   completedAt?: string | null;
+  /** carico proposto dall'app e non modificato a mano: può essere adattato serie per serie */
+  auto?: boolean;
 }
 
 export interface ExerciseLog {
@@ -219,6 +292,8 @@ export interface ExerciseLog {
   sets: SetLog[];
   /** Attività cardio: piano, timer e risultati effettivi (le serie restano vuote). */
   cardio?: CardioLogState | null;
+  /** obiettivo di carico proposto all'avvio (progressione automatica) */
+  target?: LoadTarget | null;
 }
 
 export interface WorkoutSession {
@@ -234,15 +309,24 @@ export interface WorkoutSession {
   status: 'active' | 'completed' | 'discarded';
   prs?: PRRecord[];
   rating?: number | null;
+  /** settimana del programma a più settimane (se attivo) */
+  block?: SessionBlockInfo | null;
 }
+
+export type RecordKind = 'weight' | 'e1rm' | 'rm' | 'reps' | 'time' | 'volume';
 
 export interface PRRecord {
   exerciseId: string;
-  kind: 'weight' | 'e1rm' | 'reps' | 'volume';
+  kind: RecordKind;
   value: number;
+  /** ripetizioni del record (carico massimo e record per ripetizioni) */
   reps?: number;
   date: string;
   sessionId: string;
+  /** valore del record precedente */
+  previous?: number | null;
+  /** altri record battuti nello stesso esercizio e nella stessa seduta */
+  also?: { kind: RecordKind; value: number; reps?: number; previous?: number | null }[];
 }
 
 // ---- Nutrizione ----

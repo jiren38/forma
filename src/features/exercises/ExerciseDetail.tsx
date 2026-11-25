@@ -1,12 +1,13 @@
 import { defaultPlanFor, isCardioExercise, templateCardio } from '@/lib/cardio';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Heart, Plus, AlertTriangle, Wind, ListChecks, XCircle, Lightbulb, Trophy, Dumbbell, Info, Repeat, Shuffle, Target, Timer, Layers } from 'lucide-react';
 import { getExercise, contentFor, variantsOf, alternativesOf, CATEGORY_LABEL, KIND_LABEL, MOVEMENT_LABEL, type Exercise } from '@/data/exercises';
 import { MUSCLE_LABEL, EQUIPMENT_LABEL, INJURY_LABEL } from '@/lib/labels';
 import { useMeta, useProfile, useSessions, useSettings, useTemplates, toggleFavorite, pushRecent, saveTemplate } from '@/app/data';
 import { availableEquipment, prescription } from '@/lib/generator';
-import { exerciseHistory, personalRecords } from '@/lib/stats';
+import { exerciseHistory } from '@/lib/stats';
+import { ExerciseRecords } from './ExerciseRecords';
 import { PageHeader, Empty, Sheet, Segmented, useToast } from '@/components/ui';
 import { LineChart } from '@/components/charts';
 import { fmtW, formatShortDate, uid, toDisplayWeight } from '@/lib/util';
@@ -31,7 +32,8 @@ export default function ExerciseDetail() {
   const [metric, setMetric] = useState<'e1rm' | 'weight' | 'volume' | 'reps'>('e1rm');
   const media = useExerciseMedia(e?.id);
   const [schematic, setSchematic] = useState(false);
-  const [tab, setTab] = useState<'guide' | 'tips' | 'progress' | 'similar'>('guide');
+  const [sp] = useSearchParams();
+  const [tab, setTab] = useState<'guide' | 'tips' | 'progress' | 'similar'>(() => (sp.get('tab') === 'progress' ? 'progress' : 'guide'));
   const live = sessions.find((x) => x.status === 'active');
   const units = settings.units;
 
@@ -39,7 +41,6 @@ export default function ExerciseDetail() {
 
   const eq = useMemo(() => (profile ? availableEquipment(profile) : undefined), [profile]);
   const hist = useMemo(() => (e ? exerciseHistory(sessions, e.id) : []), [sessions, e]);
-  const pr = useMemo(() => (e ? personalRecords(sessions, e.id) : {}), [sessions, e]);
 
   if (!e) return <div className="page"><PageHeader title="Esercizio" back="/exercises" /><Empty icon={<Info />} title="Esercizio non trovato" action={<Link to="/exercises" className="btn">Torna alla libreria</Link>} /></div>;
   const c = contentFor(e);
@@ -140,12 +141,7 @@ export default function ExerciseDetail() {
           {tab === 'progress' && <div className="tab-pane"><Section icon={<Trophy size={18} />} title="I tuoi progressi">
             {hist.length === 0 ? <p className="small muted">Non hai ancora registrato questo esercizio. I record e il grafico compariranno dopo il primo allenamento.</p> : (
               <div className="stack-sm">
-                <div className="grid-2">
-                  {weighted && pr.weight && <div className="stat-tile"><div className="stat"><span className="l">Carico massimo</span><span className="v">{fmtW(pr.weight.value, units)}</span><span className="tiny muted">× {pr.weight.reps} · {formatShortDate(pr.weight.date)}</span></div></div>}
-                  {weighted && pr.e1rm && <div className="stat-tile"><div className="stat"><span className="l">1RM stimato</span><span className="v">{fmtW(pr.e1rm.value, units)}</span><span className="tiny muted">formula di Epley</span></div></div>}
-                  {pr.reps && <div className="stat-tile"><div className="stat"><span className="l">{e.tracking === 'time' ? 'Tempo massimo' : 'Ripetizioni massime'}</span><span className="v">{pr.reps.value}{e.tracking === 'time' ? ' s' : ''}</span><span className="tiny muted">{formatShortDate(pr.reps.date)}</span></div></div>}
-                  {weighted && pr.volume && <div className="stat-tile"><div className="stat"><span className="l">Volume in una sessione</span><span className="v">{fmtW(pr.volume.value, units)}</span><span className="tiny muted">{formatShortDate(pr.volume.date)}</span></div></div>}
-                </div>
+                <ExerciseRecords e={e} sessions={sessions} units={units} templates={templates} profile={profile} />
                 {hist.length >= 2 ? (
                   <>
                     {weighted && <Segmented label="Metrica" value={metric} onChange={setMetric} options={[{ value: 'e1rm', label: '1RM st.' }, { value: 'weight', label: 'Carico' }, { value: 'volume', label: 'Volume' }, { value: 'reps', label: 'Rip.' }]} />}

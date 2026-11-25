@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, Upload, RefreshCw, LogOut, Trash2, Cloud, HardDrive, FileSpreadsheet, Bell, Shield, Import, Bluetooth } from 'lucide-react';
+import { Download, Upload, RefreshCw, LogOut, Trash2, Cloud, HardDrive, FileSpreadsheet, Bell, Shield, Import, Bluetooth, Dumbbell } from 'lucide-react';
+import { trainingPrefs } from '@/features/workouts/session';
 import { useSettings, patchSettings, useSessions } from '@/app/data';
 import { useAuth } from '@/app/auth';
 import { store, ALL_COLLECTIONS, type CollectionName } from '@/db/store';
@@ -16,6 +17,7 @@ import type { Settings } from '@/lib/types';
 export default function SettingsPage() {
   const toast = useToast();
   const s = useSettings();
+  const tp = trainingPrefs(s);
   const sessions = useSessions();
   const auth = useAuth();
   const sync = useSyncStatus();
@@ -82,6 +84,17 @@ export default function SettingsPage() {
         <div className="row-between"><span><b className="small">Obiettivo acqua</b></span><Stepper value={s.waterGoalMl} min={500} max={6000} step={250} format={(v) => `${fmtN(v / 1000, 2)} L`} onChange={(v) => patchSettings({ waterGoalMl: v })} /></div>
         <div className="row-between"><span><b className="small">Obiettivo sonno</b></span><Stepper value={s.sleepGoalH} min={5} max={11} step={0.5} format={(v) => `${fmtN(v, 1)} h`} onChange={(v) => patchSettings({ sleepGoalH: v })} /></div>
       </div>
+
+      <div className="section-title"><span className="row" style={{ gap: 6 }}><Dumbbell size={14} /> Allenamento</span></div>
+      <div className="settings-group">
+        <Row title="Progressione automatica dei carichi" sub="All’avvio della seduta propone carico e ripetizioni in base all’ultima volta (doppia progressione con RIR/RPE)">
+          <Switch label="Progressione automatica dei carichi" checked={tp.autoProgression} onChange={(v) => patchSettings({ training: { ...tp, autoProgression: v } })} />
+        </Row>
+        <Row title="Adatta le serie durante la seduta" sub="Dopo ogni serie aggiorna il carico delle successive in base a ripetizioni e fatica. I valori scritti a mano non vengono toccati.">
+          <Switch label="Adatta le serie durante la seduta" checked={tp.liveAdjust} onChange={(v) => patchSettings({ training: { ...tp, liveAdjust: v } })} />
+        </Row>
+      </div>
+      <p className="hint">Per un adattamento preciso registra RPE o RIR di ogni serie (si sceglie dal menu dell’allenamento in corso).</p>
 
       <div className="section-title"><span className="row" style={{ gap: 6 }}><Bell size={14} /> Promemoria e notifiche</span></div>
       {perm === 'denied' && <div className="banner warn"><Bell size={18} /><span>Le notifiche di sistema sono bloccate dal browser: i promemoria compariranno solo nella sezione Notifiche dell’app.</span></div>}

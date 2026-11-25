@@ -1,10 +1,13 @@
 /** Gestione della sessione di allenamento: avvio, salvataggio continuo, ripresa e chiusura. */
 import { store } from '@/db/store';
-import type { CardioPlan, ExerciseLog, Profile, SetLog, WorkoutSession, WorkoutTemplate } from '@/lib/types';
+import type { BlockWeek, CardioPlan, ExerciseLog, LoadTarget, Profile, Program, SessionBlockInfo, Settings, SetLog, WorkoutSession, WorkoutTemplate } from '@/lib/types';
+import { planNextLoad } from '@/lib/progression';
+import { activeWeek, sessionBlockInfo, weekCardio, weekSets } from '@/lib/periodization';
 import { liveMachineSummary } from '@/lib/ble/ftms';
 import { actualFromPlan, applyMachineData, defaultPlanFor, isCardioId, logStateFor, pauseTimer, planFromLegacy, progressTemplateCardio, timerElapsedMs } from '@/lib/cardio';
 import { detectPRs, lastPerformance } from '@/lib/stats';
-import { uid } from '@/lib/util';
+import { fmtW, uid } from '@/lib/util';
+import { recordDeltaText, recordValueText } from '@/lib/records';
 import { getExercise } from '@/data/exercises';
 import { notify } from '@/app/data';
 
@@ -27,39 +30,69 @@ export function recoverBackup(): WorkoutSession | null {
   } catch { return null; }
 }
 
-export function makeSets(n: number, prev: ExerciseLog | null, targetWeight?: number | null): SetLog[] {
+export function makeSets(n: number, prev: ExerciseLog | null, targetWeight?: number | null, auto = false): SetLog[] {
   return Array.from({ length: n }, (_, i) => {
     const p = prev?.sets.filter((x) => x.done)[i] ?? prev?.sets.filter((x) => x.done).slice(-1)[0];
-    return { uid: uid('s_'), weight: targetWeight ?? p?.weight ?? null, reps: null, rpe: null, rir: null, done: false, type: 'normal' };
+    const weight = targetWeight ?? p?.weight ?? null;
+    return { uid: uid('s_'), weight, reps: null, rpe: null, rir: null, done: false, type: 'normal', ...(auto && weight != null ? { auto: true } : {}) };
   });
 }
 
 const PLAN_FALLBACK = { level: 'beginner', injuries: [], age: 0 } as unknown as Profile;
 const currentProfile = (): Profile => store.get<Profile>('profile', 'me') ?? PLAN_FALLBACK;
 
-export function exerciseLogFor(exerciseId: string, sessions: WorkoutSession[], opts: { sets?: number; repMin?: number; repMax?: number; restSec?: number; targetWeight?: number | null; notes?: string; cardio?: CardioPlan | null } = {}): ExerciseLog {
+/** Preferenze di progressione (attive se non disattivate nelle impostazioni). */
+export function trainingPrefs(s?: Settings | null) {
+  const t = (s ?? store.get<Settings>('settings', 'me'))?.training;
+  return { autoProgression: t?.autoProgression !== false, liveAdjust: t?.liveAdjust !== false };
+}
+
+export interface LogOptions { sets?: number; repMin?: number; repMax?: number; restSec?: number; targetWeight?: number | null; notes?: string; cardio?: CardioPlan | null; week?: BlockWeek | null }
+
+export function exerciseLogFor(exerciseId: string, sessions: WorkoutSession[], opts: LogOptions = {}): ExerciseLog {
   // attività cardio: niente serie, ma piano + timer + valori effettivi
   if (opts.cardio || isCardioId(exerciseId)) {
-    const plan = opts.cardio ?? (opts.repMax ? planFromLegacy({ exerciseId, sets: opts.sets ?? 1, repMin: opts.repMin ?? 20, repMax: opts.repMax }, currentProfile()) : defaultPlanFor(exerciseId, currentProfile()));
+    const base = opts.cardio ?? (opts.repMax ? planFromLegacy({ exerciseId, sets: opts.sets ?? 1, repMin: opts.repMin ?? 20, repMax: opts.repMax }, currentProfile()) : defaultPlanFor(exerciseId, currentProfile()));
+    const plan = weekCardio(base, opts.week);
     return { uid: uid('el_'), exerciseId, restSec: 0, repMin: Math.round(plan.durationMin), repMax: Math.round(plan.durationMin), notes: opts.notes ?? '', sets: [], cardio: logStateFor(plan) };
   }
   const prev = lastPerformance(sessions, exerciseId);
   const e = getExercise(exerciseId);
   const defRest = e?.mechanic === 'isolation' ? 75 : 120;
+  const repMin = opts.repMin ?? 8, repMax = opts.repMax ?? 12;
+  const nSets = weekSets(opts.sets ?? 3, opts.week, exerciseId);
+  // progressione automatica: carico, range e RIR proposti in base allo storico e alla settimana del programma
+  let target: LoadTarget | null = null;
+  if (trainingPrefs().autoProgression) {
+    const settings = store.get<Settings>('settings', 'me');
+    target = planNextLoad({ exerciseId, sessions, repMin, repMax, units: settings?.units ?? 'kg', profile: currentProfile(), week: opts.week, templateWeight: opts.targetWeight });
+  }
+  const weight = target ? target.weight : opts.targetWeight;
   return {
-    uid: uid('el_'), exerciseId, restSec: opts.restSec ?? defRest, repMin: opts.repMin ?? 8, repMax: opts.repMax ?? 12, notes: opts.notes ?? '',
-    sets: makeSets(opts.sets ?? 3, prev, opts.targetWeight),
+    uid: uid('el_'), exerciseId, restSec: opts.restSec ?? defRest, repMin: target?.repMin ?? repMin, repMax: target?.repMax ?? repMax, notes: opts.notes ?? '',
+    sets: makeSets(nSets, prev, weight, !!target), target,
   };
+}
+
+/** Settimana del programma attivo valida per la scheda (se il programma è a più settimane). */
+export function blockFor(template: WorkoutTemplate | null): { week: BlockWeek; info: SessionBlockInfo } | null {
+  if (!template) return null;
+  const program = store.list<Program>('programs').find((p) => p.active && p.block && p.schedule.includes(template.id));
+  const pos = activeWeek(program);
+  if (!program || !pos) return null;
+  return { week: pos.info, info: sessionBlockInfo(program, pos) };
 }
 
 export async function startSession(template: WorkoutTemplate | null, name?: string): Promise<WorkoutSession> {
   const existing = activeSession();
   if (existing) return existing;
   const sessions = store.list<WorkoutSession>('sessions');
+  const block = blockFor(template);
   const s: WorkoutSession = {
     id: uid('ses_'), name: name ?? template?.name ?? 'Allenamento libero', templateId: template?.id ?? null,
     startedAt: new Date().toISOString(), endedAt: null, pausedMs: 0, pausedAt: null, status: 'active', notes: '',
-    exercises: (template?.exercises ?? []).map((te) => exerciseLogFor(te.exerciseId, sessions, te)),
+    exercises: (template?.exercises ?? []).map((te) => exerciseLogFor(te.exerciseId, sessions, { ...te, week: block?.week })),
+    block: block?.info ?? null,
   };
   backup(s);
   await store.put('sessions', s.id, s);
@@ -95,7 +128,7 @@ export async function finishSession(s: WorkoutSession): Promise<WorkoutSession> 
   backup(null);
   // progressione automatica del cardio della scheda (es. programmi per principianti)
   const tpl = ended.templateId ? store.get<WorkoutTemplate>('templates', ended.templateId) : undefined;
-  if (tpl) {
+  if (tpl && ended.block?.kind !== 'deload') {
     const prog = progressTemplateCardio(tpl, [...all.filter((x) => x.id !== ended.id), ended]);
     if (prog) {
       await store.put('templates', tpl.id, { ...prog.template, updatedAt: now.toISOString() });
@@ -105,7 +138,10 @@ export async function finishSession(s: WorkoutSession): Promise<WorkoutSession> 
   const prNotif = store.get<any>('settings', 'me')?.notifications?.prs !== false;
   for (const pr of prNotif ? ended.prs.slice(0, 3) : []) {
     const ex = getExercise(pr.exerciseId);
-    notify({ title: 'Nuovo record personale!', body: `${ex?.name ?? 'Esercizio'}: ${pr.kind === 'weight' ? `${pr.value} kg × ${pr.reps}` : pr.kind === 'e1rm' ? `1RM stimato ${pr.value} kg` : pr.kind === 'reps' ? `${pr.value} ripetizioni` : `volume ${Math.round(pr.value)} kg`}`, kind: 'pr', link: `/session/${ended.id}` }, `pr_${ended.id}_${pr.exerciseId}`);
+    const units = store.get<Settings>('settings', 'me')?.units ?? 'kg';
+    const fw = (kg: number) => fmtW(kg, units);
+    const delta = recordDeltaText(pr, fw);
+    notify({ title: 'Nuovo record personale!', body: `${ex?.name ?? 'Esercizio'}: ${recordValueText(pr, fw)}${delta ? ` (${delta})` : ''}`, kind: 'pr', link: `/exercises/${pr.exerciseId}?tab=progress` }, `pr_${ended.id}_${pr.exerciseId}`);
   }
   return ended;
 }
