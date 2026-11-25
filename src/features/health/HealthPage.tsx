@@ -1,0 +1,147 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, Check, Copy, Footprints, HeartPulse, Info, Moon, RefreshCw, Scale, Smartphone, Zap } from 'lucide-react';
+import { useMeta } from '@/app/data';
+import { PageHeader, Segmented, Loading, useToast } from '@/components/ui';
+import { isNativeApp } from '@/lib/native';
+import { HEALTH_SHORTCUT_NAME, NATIVE_HEALTH_URL, WEB_HEALTH_URL, runShortcutUrl } from '@/lib/health';
+import { fmtN } from '@/lib/util';
+import { importHealthUrl } from './HealthBridge';
+
+function when(iso: string) {
+  const d = new Date(iso), now = new Date();
+  const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `oggi alle ${time}`;
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return `ieri alle ${time}`;
+  return `${d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} alle ${time}`;
+}
+
+const hm = (h: number) => { const H = Math.floor(h), M = Math.round((h - H) * 60); return `${H} h ${`${M}`.padStart(2, '0')}`; };
+
+/** Apre il comando rapido: Comandi Rapidi legge Salute e riapre Forma con i dati. */
+export function runHealthShortcut() { window.location.href = runShortcutUrl(); }
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const toast = useToast();
+  const [done, setDone] = useState(false);
+  async function copy() {
+    try { await navigator.clipboard.writeText(value); setDone(true); setTimeout(() => setDone(false), 1600); }
+    catch { toast('Copia non riuscita: tieni premuto sul testo per copiarlo', 'error'); }
+  }
+  return (
+    <div className="hk-copy">
+      <div className="grow" style={{ minWidth: 0 }}><div className="tiny muted">{label}</div><code>{value}</code></div>
+      <button className="icon-btn ghost" onClick={copy} aria-label={`Copia ${label}`}>{done ? <Check size={17} color="var(--success)" /> : <Copy size={17} />}</button>
+    </div>
+  );
+}
+
+const BLOCKS = [
+  { word: 'passi', type: 'Passi', filter: 'Data di inizio è negli ultimi 7 giorni', extra: <>Tocca <b>Raggruppa per</b> e scegli <b>Giorno</b> (così Salute somma iPhone e Apple Watch senza contarli due volte).</> },
+  { word: 'sonno', type: 'Sonno (Analisi del sonno)', filter: 'Data di inizio è negli ultimi 2 giorni', extra: <>Nessun raggruppamento: servono le singole fasi.</> },
+  { word: 'peso', type: 'Peso', filter: 'Data di inizio è negli ultimi 30 giorni', extra: <>Al primo collegamento puoi mettere 365 giorni per portare in Forma anche lo storico.</> },
+];
+
+export default function HealthPage() {
+  const meta = useMeta();
+  const h = meta.health;
+  const [mode, setMode] = useState<'app' | 'web'>(isNativeApp() ? 'app' : 'web');
+  const base = mode === 'app' ? NATIVE_HEALTH_URL : WEB_HEALTH_URL;
+  const s = h?.summary;
+
+  return (
+    <div className="page stack">
+      <PageHeader title="Apple Salute" back />
+
+      <section className="card stack-sm">
+        <div className="row" style={{ gap: 12 }}>
+          <span className="hk-badge"><HeartPulse size={22} /></span>
+          <div className="grow">
+            <h3>{h ? 'Collegato tramite Comandi Rapidi' : 'Non ancora collegato'}</h3>
+            <p className="small text-2" style={{ marginTop: 2 }}>{h ? `Ultimo aggiornamento ${when(h.lastImportAt)}` : 'Passi, sonno e peso arrivano da soli da Salute, senza inserirli a mano.'}</p>
+          </div>
+        </div>
+        {h?.error && <div className="banner warn"><AlertTriangle size={18} /><span>{h.error}{h.invalid?.length ? <><br /><span className="tiny muted">Esempio ricevuto: <code>{h.invalid[0]}</code></span></> : null}</span></div>}
+        {s && (
+          <div className="grid-3">
+            <div className="stat-tile"><div className="stat"><span className="l"><Footprints size={13} /> Passi oggi</span><span className="v" style={{ fontSize: 18 }}>{s.steps.today != null ? fmtN(s.steps.today) : '–'}</span><span className="tiny muted">{s.steps.days} giorni letti</span></div></div>
+            <div className="stat-tile"><div className="stat"><span className="l"><Moon size={13} /> Ultima notte</span><span className="v" style={{ fontSize: 18 }}>{s.sleep.last ? hm(s.sleep.last.hours) : '–'}</span><span className="tiny muted">{s.sleep.keptManual ? `${s.sleep.keptManual} già inserite a mano` : s.sleep.last ? `${s.sleep.last.bedTime} → ${s.sleep.last.wakeTime}` : 'nessun dato'}</span></div></div>
+            <div className="stat-tile"><div className="stat"><span className="l"><Scale size={13} /> Peso</span><span className="v" style={{ fontSize: 18 }}>{s.weight.latest ? `${fmtN(s.weight.latest.kg, 1)} kg` : '–'}</span><span className="tiny muted">{s.weight.added ? `${s.weight.added} nuove pesate` : 'nessuna nuova'}</span></div></div>
+          </div>
+        )}
+        {s && s.invalid > 0 && !h?.error && <p className="hint">{s.invalid} righe non riconosciute sono state ignorate.</p>}
+        <button className="btn primary block" onClick={runHealthShortcut}><RefreshCw size={16} /> Aggiorna da Salute</button>
+        <p className="hint">Il pulsante avvia il comando rapido “{HEALTH_SHORTCUT_NAME}”, che legge Salute e riapre Forma con i dati aggiornati.</p>
+      </section>
+
+      <section className="card stack-sm">
+        <div className="card-title" style={{ margin: 0 }}><h3><Info size={18} /> Come funziona</h3></div>
+        <p className="small text-2" style={{ lineHeight: 1.6 }}>
+          Le app installate con un Apple ID gratuito non possono avere il permesso di Salute (HealthKit): Apple lo concede solo con l’account sviluppatore a pagamento.
+          Per questo si usa <b>Comandi Rapidi</b>, l’app di Apple che può leggere Salute: un comando legge i dati e li passa a Forma.
+        </p>
+        <ul className="bullets small text-2">
+          <li><b>Passi</b> di ogni giorno, in Benessere.</li>
+          <li><b>Sonno</b> della notte (ore, a letto e sveglia), sul giorno del risveglio. Se hai già scritto il sonno a mano, resta il tuo.</li>
+          <li><b>Peso</b> in Corpo e misure (una pesata al giorno, la prima) e nel profilo per calorie e stime. Le pesate già presenti non si duplicano.</li>
+        </ul>
+        <p className="hint">I dati restano in Forma e si sincronizzano con il tuo account come gli altri. Forma non scrive nulla in Salute.</p>
+      </section>
+
+      <section className="card stack">
+        <div className="card-title" style={{ margin: 0 }}><h3><Smartphone size={18} /> Crea il comando (una volta sola)</h3></div>
+        <div className="field">
+          <label>Uso Forma da</label>
+          <Segmented label="Uso Forma da" value={mode} onChange={setMode} options={[{ value: 'app', label: 'App iPhone' }, { value: 'web', label: 'Safari' }]} />
+        </div>
+        <ol className="steps">
+          <li><span>Apri <b>Comandi</b> (Comandi Rapidi), tocca <b>+</b> e chiama il comando esattamente <b>{HEALTH_SHORTCUT_NAME}</b>.</span></li>
+          {BLOCKS.map((b) => (
+            <li key={b.word}>
+              <span>
+                Aggiungi <b>Trova campioni di Salute</b> (Find Health Samples): tipo <b>{b.type}</b>, filtro <b>{b.filter}</b>. {b.extra}<br />
+                Poi <b>Ripeti con ogni elemento</b> e, dentro la ripetizione, un’azione <b>Testo</b> con:
+                <span className="hk-line"><b>{b.word};</b><i>Data di inizio</i><b>;</b><i>Data di fine</i><b>;</b><i>Valore</i></span>
+                Le parti in corsivo sono variabili: tocca sopra la tastiera <b>Elemento di ripetizione</b>, poi toccalo di nuovo e scegli la proprietà. Sotto il Testo, sempre nella ripetizione, aggiungi <b>Aggiungi alla variabile</b> con nome <b>Dati</b>.
+              </span>
+            </li>
+          ))}
+          <li><span>Dopo le tre ripetizioni aggiungi <b>Combina testo</b>: <i>Dati</i> con <b>A capo</b>. Poi <b>Codifica URL</b> sul testo combinato.</span></li>
+          <li><span>Per finire <b>Apri URL</b> con l’indirizzo qui sotto seguito dalla variabile <i>Testo codificato</i>:</span></li>
+        </ol>
+        <CopyField label="Indirizzo da mettere in Apri URL" value={base} />
+        {mode === 'web' && <p className="hint">Con Safari i dati vanno nella versione web; se hai l’account si sincronizzano anche nell’app. Se usi l’app iPhone scegli “App iPhone”.</p>}
+        <div className="banner"><Info size={18} /><span>Consigliato: in ogni variabile data (<i>Data di inizio</i>, <i>Data di fine</i>) scegli il formato <b>ISO 8601</b>. Forma capisce anche il formato normale, ma ISO evita ogni ambiguità.</span></div>
+        <p className="small text-2">Prova il comando con ▶︎. La prima volta iPhone chiede di consentire l’accesso a Salute (consenti Passi, Sonno e Peso) e di aprire Forma.</p>
+      </section>
+
+      <section className="card stack-sm">
+        <div className="card-title" style={{ margin: 0 }}><h3><Zap size={18} /> Aggiornamento automatico</h3></div>
+        <ol className="steps">
+          <li><span>In Comandi apri <b>Automazione</b> › <b>+</b> › <b>App</b>.</span></li>
+          <li><span>Scegli <b>Forma</b>, spunta <b>È aperta</b> e seleziona <b>Esegui immediatamente</b>.</span></li>
+          <li><span>Come azione scegli il comando <b>{HEALTH_SHORTCUT_NAME}</b>.</span></li>
+        </ol>
+        <p className="hint">Da quel momento ogni volta che apri Forma i dati si aggiornano da soli in un paio di secondi. Puoi aggiungere anche un’automazione <b>Ora del giorno</b> (es. ogni mattina alle 9).</p>
+      </section>
+
+      <Link to="/wellness" className="btn block">Vedi passi e sonno in Benessere</Link>
+    </div>
+  );
+}
+
+/** Sul web il comando apre …/#/salute/importa?d=…: importa e mostra la pagina di Apple Salute. */
+export function HealthImportRoute() {
+  const [sp] = useSearchParams();
+  const nav = useNavigate();
+  const toast = useToast();
+  const once = useRef(false);
+  useEffect(() => {
+    if (once.current) return;
+    once.current = true;
+    const q = sp.toString();
+    void importHealthUrl(`${WEB_HEALTH_URL.split('?')[0]}?${q}`, toast).finally(() => nav('/salute', { replace: true }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <Loading label="Importazione da Apple Salute…" />;
+}
