@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Trophy, Clock, Layers, Repeat2, Weight, Trash2, Save, Info, TrendingUp, TrendingDown, Minus, Star, PartyPopper, Play, Bike, Route, Gauge, Flame, Dumbbell } from 'lucide-react';
+import { Target, Trophy, Clock, Layers, Repeat2, Weight, Trash2, Save, Info, TrendingUp, TrendingDown, Minus, Star, PartyPopper, Play, Bike, Route, Gauge, Flame, Dumbbell } from 'lucide-react';
 import { useDoc, store } from '@/db/store';
 import { useSessions, useSettings, saveTemplate } from '@/app/data';
 import { PageHeader, Empty, Confirm, useToast } from '@/components/ui';
 import { getExercise } from '@/data/exercises';
 import { completedSessions, doneSets, sessionStats } from '@/lib/stats';
 import { formatDuration, formatLongDate, formatTime, fmtN, fmtW, toDisplayWeight, uid } from '@/lib/util';
-import type { WorkoutSession, WorkoutTemplate } from '@/lib/types';
+import type { PRRecord, WorkoutSession, WorkoutTemplate } from '@/lib/types';
+import { RECORD_LABEL, recordDeltaText, recordValueText } from '@/lib/records';
+import { planNextLoad, targetDelta } from '@/lib/progression';
+import { WEEK_LABEL } from '@/lib/periodization';
 import { ExerciseThumb } from '@/features/exercises/components';
 import { activeSession, startSession, exerciseLogFor, saveSession } from './session';
 import { sessionCardioStats, templateCardio } from '@/lib/cardio';
@@ -17,11 +20,8 @@ import { useMeasurements, useProfile } from '@/app/data';
 import { sessionEnergy, weightResolver } from '@/lib/energy';
 import { dayKey } from '@/lib/util';
 
-function prText(kind: string, value: number, reps: number | undefined, units: 'kg' | 'lb') {
-  if (kind === 'weight') return `${fmtW(value, units)} × ${reps}`;
-  if (kind === 'e1rm') return `1RM stimato ${fmtW(value, units)}`;
-  if (kind === 'reps') return `${value} ripetizioni`;
-  return `volume ${fmtW(value, units)}`;
+function prText(p: PRRecord, units: 'kg' | 'lb') {
+  return recordValueText(p, (kg) => fmtW(kg, units));
 }
 
 function Delta({ cur, prev, fmt }: { cur: number; prev: number | undefined; fmt: (n: number) => string }) {
@@ -55,6 +55,13 @@ export default function SessionDetail() {
   const strengthLogs = s.exercises.filter((e) => !e.cardio);
   const cardioLogs = s.exercises.filter((e) => e.cardio?.done && e.cardio.actual);
   const justDone = sp.get('done') === '1';
+  // obiettivi della prossima seduta: solo per l'allenamento più recente (quelli vecchi sono superati)
+  const isLatest = s.status === 'completed' && !done.some((x) => x.startedAt > s.startedAt);
+  const tpl = s.templateId ? store.get<WorkoutTemplate>('templates', s.templateId) : undefined;
+  const nextPlan = isLatest && s.block?.kind !== 'deload' ? strengthLogs.filter((ex) => ex.sets.some((x) => x.done)).map((ex) => {
+    const te = tpl?.exercises.find((x) => x.exerciseId === ex.exerciseId);
+    return { ex, t: planNextLoad({ exerciseId: ex.exerciseId, sessions, repMin: te?.repMin ?? ex.target?.repMin ?? ex.repMin, repMax: te?.repMax ?? ex.target?.repMax ?? ex.repMax, units, profile }) };
+  }).filter(({ t }) => t.kind !== 'start') : [];
   const energy = profile && s.status === 'completed' ? sessionEnergy(s, weightResolver(measurements, profile.weightKg)(dayKey(s.startedAt))) : null;
 
   async function saveAsTemplate() {
@@ -85,7 +92,7 @@ export default function SessionDetail() {
 
   return (
     <div className="page stack">
-      <PageHeader title={s.name} back={justDone ? '/' : true} sub={`${formatLongDate(s.startedAt)} · ${formatTime(s.startedAt)}`}
+      <PageHeader title={s.name} back={justDone ? '/' : true} sub={`${formatLongDate(s.startedAt)} · ${formatTime(s.startedAt)}${s.block ? ` · settimana ${s.block.week + 1} di ${s.block.weeks} (${WEEK_LABEL[s.block.kind].toLowerCase()})` : ''}`}
         right={<button className="icon-btn ghost" onClick={() => setDel(true)} aria-label="Elimina allenamento"><Trash2 size={19} /></button>} />
 
       {justDone && (
@@ -136,8 +143,40 @@ export default function SessionDetail() {
         <section className="card">
           <div className="card-title"><h3><Trophy size={18} color="#ffb020" /> Record personali</h3></div>
           <div className="stack-sm">
-            {s.prs.map((p, i) => <div key={i} className="row-between small"><Link to={`/exercises/${p.exerciseId}`} style={{ fontWeight: 600 }}>{getExercise(p.exerciseId)?.name}</Link><span className="pr-badge">{prText(p.kind, p.value, p.reps, units)}</span></div>)}
+            {s.prs.map((p, i) => {
+              const d = recordDeltaText(p, (kg) => fmtW(kg, units));
+              return (
+                <Link key={i} to={`/exercises/${p.exerciseId}?tab=progress`} className="rec-row">
+                  <span className="rr-ic"><Trophy size={16} /></span>
+                  <span className="grow" style={{ minWidth: 0 }}>
+                    <div className="ellipsis" style={{ fontWeight: 650 }}>{getExercise(p.exerciseId)?.name}</div>
+                    <div className="tiny muted">{prText(p, units)}{p.previous != null ? ` · prima ${recordValueText({ ...p, value: p.previous }, (kg) => fmtW(kg, units)).replace(/ × \d+$/, '')}` : ''}{p.also?.length ? ` · anche ${p.also.map((a) => RECORD_LABEL[a.kind].toLowerCase()).join(', ')}` : ''}</div>
+                  </span>
+                  {d && <span className="rr-delta">{d}</span>}
+                </Link>
+              );
+            })}
           </div>
+        </section>
+      )}
+
+      {nextPlan.length > 0 && (
+        <section className="card">
+          <div className="card-title"><h3><Target size={18} /> Prossima volta</h3><span className="tiny muted">progressione automatica</span></div>
+          <div className="next-list">
+            {nextPlan.map(({ ex, t }) => {
+              const e = getExercise(ex.exerciseId)!;
+              const d = targetDelta(t, units);
+              return (
+                <Link key={ex.uid} to={`/exercises/${e.id}?tab=progress`} className="nl-row" style={{ color: 'inherit' }} title={t.reason}>
+                  <span className="grow ellipsis" style={{ fontWeight: 600 }}>{e.name}</span>
+                  <span className="num small" style={{ fontWeight: 700 }}>{t.weight != null && e.tracking === 'weight_reps' ? `${fmtW(t.weight, units)} × ${t.aimReps ?? `${t.repMin}–${t.repMax}`}` : t.aimReps ? `${t.aimReps} ${e.tracking === 'time' ? 's' : 'rip.'}` : `${t.repMin}–${t.repMax}`}</span>
+                  {d && <span className={`pill ${t.kind === 'increase' ? 'success' : t.kind === 'decrease' ? 'orange' : ''}`}>{d}</span>}
+                </Link>
+              );
+            })}
+          </div>
+          <p className="hint" style={{ marginTop: 8 }}>Valori proposti in automatico all’avvio della prossima seduta, calcolati da ripetizioni e fatica di oggi. Puoi sempre modificarli.</p>
         </section>
       )}
 

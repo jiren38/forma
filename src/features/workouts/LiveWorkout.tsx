@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Check, Pause, Play, Plus, MoreHorizontal, Trash2, Repeat, ArrowUp, ArrowDown, Info, Trophy, Minimize2,
-  SkipForward, StickyNote, Flag, X, Dumbbell, RotateCcw, Bike, Pencil,
+  SkipForward, StickyNote, Flag, X, Dumbbell, RotateCcw, Bike, Pencil, Target, TrendingUp, TrendingDown, Minus, Sparkles, CalendarRange,
 } from 'lucide-react';
 import { useProfile, useSessions, useSettings } from '@/app/data';
 import { store } from '@/db/store';
@@ -15,10 +15,13 @@ import { ExerciseVisual } from '@/features/exercises/media';
 import { ExercisePicker, ExerciseRow } from '@/features/exercises/components';
 import { getExercise, type Exercise } from '@/data/exercises';
 import { substitutes } from '@/lib/generator';
-import { e1rm, lastPerformance, personalRecords, sessionDurationMs, sessionStats } from '@/lib/stats';
+import { lastPerformance, sessionDurationMs, sessionStats } from '@/lib/stats';
+import { liveSetRecords, mainHit, recordBook, recordDeltaText, recordValueText, type RecordBook, type RecordHit } from '@/lib/records';
+import { adviseNextSet, defaultRir, targetDelta, type NextSetAdvice } from '@/lib/progression';
+import { WEEK_HINT, WEEK_LABEL, weekParams } from '@/lib/periodization';
 import { formatClock, formatDuration, fromDisplayWeight, toDisplayWeight, uid, vibrate, fmtN, fmtW } from '@/lib/util';
-import { discardSession, exerciseLogFor, finishSession, recoverBackup, saveSession, startSession, makeSets } from './session';
-import type { CardioLogState, ExerciseLog, SetLog, WorkoutSession } from '@/lib/types';
+import { discardSession, exerciseLogFor, finishSession, recoverBackup, saveSession, startSession, trainingPrefs } from './session';
+import type { CardioLogState, ExerciseLog, LoadTarget, SetLog, WorkoutSession } from '@/lib/types';
 import { CardioLive, startCardioTimer } from './CardioLive';
 import { disconnectFtms } from '@/lib/ble/ftms';
 import { AddCardioSheet, CardioPlanEditor, MachinePicker, convertPlan } from './cardio-ui';
@@ -71,6 +74,9 @@ export default function LiveWorkout() {
   const [addCardio, setAddCardio] = useState(false);
   const [planFor, setPlanFor] = useState<string | null>(null);
   const [machineFor, setMachineFor] = useState<ExerciseLog | null>(null);
+  const [whyFor, setWhyFor] = useState<ExerciseLog | null>(null);
+  const [hints, setHints] = useState<Record<string, NextSetAdvice & { applied: boolean }>>({});
+  const [flash, setFlash] = useState<{ id: number; name: string; hit: RecordHit } | null>(null);
   const recovered = useRef(false);
   const units = settings.units;
 
@@ -110,12 +116,13 @@ export default function LiveWorkout() {
 
   // record precedenti per esercizio (calcolati sullo storico, esclusa la sessione corrente)
   const prBefore = useMemo(() => {
-    const m: Record<string, ReturnType<typeof personalRecords>> = {};
+    const m: Record<string, RecordBook> = {};
     if (!s) return m;
-    const others = sessions.filter((x) => x.id !== s.id);
-    for (const ex of s.exercises) if (!m[ex.exerciseId]) m[ex.exerciseId] = personalRecords(others, ex.exerciseId, s.startedAt);
+    for (const ex of s.exercises) if (!m[ex.exerciseId] && !ex.cardio) m[ex.exerciseId] = recordBook(sessions, ex.exerciseId, { beforeIso: s.startedAt, excludeId: s.id });
     return m;
-  }, [s?.id, s?.exercises.length, sessions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s?.id, s?.exercises.map((e) => e.exerciseId).join(), sessions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // il riquadro del nuovo record sparisce da solo
+  useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(null), 4500); return () => clearTimeout(t); }, [flash]);
   const prevLogs = useMemo(() => {
     const m: Record<string, ExerciseLog | null> = {};
     if (!s) return m;
@@ -163,40 +170,55 @@ export default function LiveWorkout() {
 
   function toggleSet(ex: ExerciseLog, st: SetLog, idx: number) {
     const e = getExercise(ex.exerciseId);
-    if (st.done) { updateSet(ex.uid, st.uid, { done: false, completedAt: null }); return; }
+    if (st.done) { updateSet(ex.uid, st.uid, { done: false, completedAt: null }); setHints(({ [ex.uid]: _, ...h }) => h); return; }
     const prev = prevLogs[ex.exerciseId]?.sets.filter((x) => x.done)[idx];
     let weight = st.weight, reps = st.reps;
+    if (reps == null && ex.target?.aimReps != null && st.type !== 'warmup') reps = ex.target.aimReps;
     if (reps == null && prev?.reps != null) reps = prev.reps;
     if (weight == null && prev?.weight != null && e?.tracking === 'weight_reps') weight = prev.weight;
     if (reps == null) { toast(e?.tracking === 'time' ? 'Inserisci i secondi' : e?.tracking === 'cardio' ? 'Inserisci i minuti' : 'Inserisci le ripetizioni', 'error'); return; }
     if (e?.tracking === 'weight_reps' && weight == null) weight = 0;
-    updateSet(ex.uid, st.uid, { done: true, weight, reps, completedAt: new Date().toISOString() });
-    vibrate(30);
+    const doneSet: SetLog = { ...st, done: true, weight, reps, completedAt: new Date().toISOString() };
+    // adattamento automatico delle serie successive (solo i carichi proposti dall'app, mai quelli scritti a mano)
+    const advice = trainingPrefs(settings).liveAdjust ? adviseNextSet({ exerciseId: ex.exerciseId, done: doneSet, repMin: ex.repMin, repMax: ex.repMax, rir: ex.target?.rir ?? session.block?.rir ?? defaultRir(profile), units }) : null;
+    const after = ex.sets.slice(idx + 1);
+    const adjustable = after.filter((x) => !x.done && x.type !== 'warmup' && (x.auto || x.weight == null));
+    const apply = !!advice && advice.change !== 'same' && adjustable.length > 0;
+    updateEx(ex.uid, (x) => ({
+      ...x,
+      sets: x.sets.map((y) => (y.uid === st.uid ? doneSet : apply && adjustable.some((a) => a.uid === y.uid) ? { ...y, weight: advice!.weight, auto: true } : y)),
+    }));
+    if (advice && after.some((x) => !x.done)) setHints((h) => ({ ...h, [ex.uid]: { ...advice, applied: apply } }));
+    // nuovo record durante la seduta
+    const book = prBefore[ex.exerciseId];
+    const hit = book ? mainHit(liveSetRecords(book, ex.sets.filter((x) => x.done), doneSet)) : null;
+    if (hit && settings.notifications.prs !== false) { setFlash({ id: Date.now(), name: e?.name ?? '', hit }); vibrate([40, 60, 40, 60, 120]); }
+    else vibrate(30);
     if (paused) return;
     const restSec = st.type === 'warmup' ? Math.min(60, ex.restSec) : ex.restSec;
     if (restSec > 0) setRest({ endsAt: Date.now() + restSec * 1000, total: restSec, label: e?.name ?? '' });
   }
 
-  function isPR(ex: ExerciseLog, st: SetLog) {
-    if (!st.done || st.type === 'warmup') return false;
+  /** Record battuto dalla serie (per il badge), rispetto allo storico e alle serie precedenti della seduta. */
+  function prOf(ex: ExerciseLog, st: SetLog, i: number): RecordHit | null {
+    if (!st.done || st.type === 'warmup') return null;
     const b = prBefore[ex.exerciseId];
-    if (!b || !(b.weight || b.reps)) return false;
-    const e = getExercise(ex.exerciseId);
-    const w = st.weight ?? 0, r = st.reps ?? 0;
-    if (e?.tracking === 'weight_reps') return w > (b.weight?.value ?? 0) || e1rm(w, r) > (b.e1rm?.value ?? 0) * 1.0001;
-    return r > (b.reps?.value ?? 0);
+    if (!b) return null;
+    return mainHit(liveSetRecords(b, ex.sets.slice(0, i).filter((x) => x.done), st));
   }
+  const fw = (kg: number) => fmtW(kg, units);
 
   function addExercises(ids: string[]) {
-    const add = ids.map((id) => exerciseLogFor(id, sessions, { restSec: settings.restDefaultSec }));
+    const add = ids.map((id) => exerciseLogFor(id, sessions, { restSec: settings.restDefaultSec, week: weekOfSession(session) }));
     save({ exercises: [...session.exercises, ...add] });
     toast(ids.length === 1 ? 'Esercizio aggiunto' : `${ids.length} esercizi aggiunti`);
   }
   function swapExercise(ex: ExerciseLog, newId: string) {
-    const prev = lastPerformance(sessions, newId, session.id);
     const keep = ex.sets.filter((x) => x.done);
     const n = Math.max(1, ex.sets.length - keep.length);
-    const replacement: ExerciseLog = { ...ex, exerciseId: newId, sets: makeSets(n, prev) };
+    // il sostituto riceve il proprio obiettivo di carico (dallo storico di quell'esercizio)
+    const fresh = exerciseLogFor(newId, sessions.filter((x) => x.id !== session.id), { sets: n, repMin: ex.repMin, repMax: ex.repMax, restSec: ex.restSec, week: weekOfSession(session) ? { ...weekOfSession(session)!, repShift: 0, extraSets: 0, setsFactor: 1 } : null });
+    const replacement: ExerciseLog = { ...ex, exerciseId: newId, sets: fresh.sets, target: fresh.target ?? null };
     // le serie già completate restano registrate sull'esercizio originale
     const parts = keep.length ? [{ ...ex, uid: uid('el_'), sets: keep }, replacement] : [replacement];
     save({ exercises: session.exercises.flatMap((e) => (e.uid === ex.uid ? parts : [e])) });
@@ -257,6 +279,13 @@ export default function LiveWorkout() {
           <button className="icon-btn ghost" onClick={() => setMenuOpen(true)} aria-label="Opzioni allenamento"><MoreHorizontal size={20} /></button>
         </div>
         {paused && <div className="banner warn"><Pause size={18} /><span>Allenamento in pausa: il tempo non viene conteggiato. <button className="link accent" style={{ background: 'none', border: 0, padding: 0, fontWeight: 700, cursor: 'pointer' }} onClick={togglePause}>Riprendi</button></span></div>}
+        {session.block && (
+          <div className={`block-banner ${session.block.kind}`} role="note">
+            <CalendarRange size={18} />
+            <span className="grow"><b>Settimana {session.block.week + 1} di {session.block.weeks} · {WEEK_LABEL[session.block.kind]}</b>
+              <span className="tiny">{WEEK_HINT[session.block.kind]} Obiettivo: {session.block.rir} {session.block.rir === 1 ? 'ripetizione' : 'ripetizioni'} in riserva{session.block.load < 1 ? `, carichi −${Math.round((1 - session.block.load) * 100)}%` : ''}.</span></span>
+          </div>
+        )}
 
         {session.exercises.length === 0 && (
           <div className="card"><Empty icon={<Plus />} title="Aggiungi il primo esercizio" text="Scegli dalla libreria: vedrai animazione, serie precedenti e record. Oppure aggiungi un’attività cardio con timer." action={<div className="row wrap" style={{ justifyContent: 'center' }}><button className="btn primary" onClick={() => setPicker(true)}><Plus size={18} /> Aggiungi esercizio</button><button className="btn" onClick={() => setAddCardio(true)}><Bike size={18} /> Aggiungi cardio</button></div>} /></div>
@@ -289,6 +318,8 @@ export default function LiveWorkout() {
                 <button className="icon-btn ghost" onClick={() => setExMenu(ex)} aria-label={`Opzioni ${e.name}`}><MoreHorizontal size={20} /></button>
               </div>
 
+              {ex.target && <TargetLine t={ex.target} units={units} weighted={e.tracking === 'weight_reps'} unit={e.tracking === 'time' ? 's' : 'rip.'} onWhy={() => setWhyFor(ex)} />}
+
               {animOpen && <div style={{ marginTop: 12, maxWidth: 320, marginInline: 'auto' }}><ExerciseVisual exerciseId={e.id} patternId={e.pattern} muscles={e.primary} controls label={e.name} /></div>}
 
               <input className="input" style={{ marginTop: 10, height: 38, fontSize: 13.5 }} placeholder="Note (es. sensazioni, regolazioni macchina)" value={ex.notes ?? ''} onChange={(ev) => updateEx(ex.uid, (x) => ({ ...x, notes: ev.target.value }))} aria-label={`Note ${e.name}`} />
@@ -308,7 +339,7 @@ export default function LiveWorkout() {
                   {ex.sets.map((st, i) => {
                     if (st.type !== 'warmup') normalIdx++;
                     const p = prevDone[i];
-                    const pr = isPR(ex, st);
+                    const pr = prOf(ex, st, i);
                     const label = st.type === 'warmup' ? 'R' : st.type === 'drop' ? 'D' : st.type === 'failure' ? 'C' : String(normalIdx);
                     return (
                       <tr key={st.uid} className={`set-row ${st.done ? 'done' : ''}`}>
@@ -318,12 +349,12 @@ export default function LiveWorkout() {
                             onClick={() => p && updateSet(ex.uid, st.uid, { weight: p.weight, reps: p.reps })} aria-label={p ? 'Copia i valori precedenti' : 'Nessun dato precedente'}>
                             {p ? (e.tracking === 'weight_reps' ? `${toDisplayWeight(p.weight, units) ?? 0}×${p.reps ?? 0}` : `${p.reps ?? 0}${e.tracking === 'time' ? 's' : ''}`) : '–'}
                           </button>
-                          {pr && <div><span className="pr-badge"><Trophy size={10} /> PR</span></div>}
+                          {pr && <div><span className="pr-badge" title={recordValueText(pr, fw)}><Trophy size={10} /> {pr.kind === 'rm' ? `${pr.reps}RM` : pr.kind === 'e1rm' ? '1RM' : 'PR'}</span></div>}
                         </td>
                         {(e.tracking === 'weight_reps' || e.tracking === 'reps') && (
-                          <td><NumberInput className="set-input" value={toDisplayWeight(st.weight, units)} min={0} max={1000} placeholder={p?.weight != null ? String(toDisplayWeight(p.weight, units)) : '0'} ariaLabel={`Carico serie ${label}`} onChange={(v) => updateSet(ex.uid, st.uid, { weight: fromDisplayWeight(v, units) })} /></td>
+                          <td><NumberInput className={`set-input ${st.auto && !st.done ? 'auto' : ''}`} value={toDisplayWeight(st.weight, units)} min={0} max={1000} placeholder={p?.weight != null ? String(toDisplayWeight(p.weight, units)) : '0'} ariaLabel={`Carico serie ${label}${st.auto && !st.done ? ' (proposto dall’app)' : ''}`} onChange={(v) => updateSet(ex.uid, st.uid, { weight: fromDisplayWeight(v, units), auto: false })} /></td>
                         )}
-                        <td><NumberInput className="set-input" value={st.reps} min={0} max={e.tracking === 'time' ? 3600 : 500} placeholder={p?.reps != null ? String(p.reps) : `${ex.repMin}`} ariaLabel={`Ripetizioni serie ${label}`} onChange={(v) => updateSet(ex.uid, st.uid, { reps: v == null ? null : Math.round(v) })} /></td>
+                        <td><NumberInput className="set-input" value={st.reps} min={0} max={e.tracking === 'time' ? 3600 : 500} placeholder={st.type !== 'warmup' && ex.target?.aimReps != null ? String(ex.target.aimReps) : p?.reps != null ? String(p.reps) : `${ex.repMin}`} ariaLabel={`Ripetizioni serie ${label}`} onChange={(v) => updateSet(ex.uid, st.uid, { reps: v == null ? null : Math.round(v) })} /></td>
                         {effort !== 'off' && e.tracking !== 'cardio' && (
                           <td><NumberInput className="set-input sm" value={effort === 'rpe' ? st.rpe : st.rir} min={0} max={effort === 'rpe' ? 10 : 10} placeholder="–" ariaLabel={`${effort.toUpperCase()} serie ${label}`} onChange={(v) => updateSet(ex.uid, st.uid, effort === 'rpe' ? { rpe: v } : { rir: v })} /></td>
                         )}
@@ -333,6 +364,12 @@ export default function LiveWorkout() {
                   })}
                 </tbody>
               </table>
+              {hints[ex.uid] && ex.sets.some((x) => !x.done) && (
+                <div className={`next-set ${hints[ex.uid].change}`} role="status">
+                  {hints[ex.uid].change === 'up' ? <TrendingUp size={15} /> : hints[ex.uid].change === 'down' ? <TrendingDown size={15} /> : <Minus size={15} />}
+                  <span className="grow">{hints[ex.uid].reason}{hints[ex.uid].applied ? ' Carico aggiornato nelle prossime serie.' : ''}</span>
+                </div>
+              )}
               <div className="row" style={{ gap: 8, marginTop: 6 }}>
                 <button className="btn sm grow" onClick={() => updateEx(ex.uid, (x) => {
                   const last = x.sets[x.sets.length - 1];
@@ -386,6 +423,39 @@ export default function LiveWorkout() {
           updateEx(ex.uid, (x) => ({ ...x, exerciseId: c.exerciseId, cardio: { ...x.cardio!, plan: c.plan } }));
           toast(`Macchina cambiata: ${getExercise(c.exerciseId)?.name}`);
         }} />
+
+      {flash && (
+        <div key={flash.id} className="pr-flash" role="status" aria-live="polite" onClick={() => setFlash(null)}>
+          <span className="pr-flash-ic"><Trophy size={22} /></span>
+          <span className="grow"><b>Nuovo record!</b><span className="small">{flash.name}: {recordValueText(flash.hit, fw)}{recordDeltaText(flash.hit, fw) ? ` · ${recordDeltaText(flash.hit, fw)}` : ''}</span></span>
+        </div>
+      )}
+
+      <Sheet open={!!whyFor} onClose={() => setWhyFor(null)} title={whyFor ? `Obiettivo di oggi · ${getExercise(whyFor.exerciseId)?.name ?? ''}` : ''}>
+        {whyFor?.target && (() => {
+          const t = whyFor.target!;
+          const prevSets = prevLogs[whyFor.exerciseId]?.sets.filter((x) => x.done && x.type !== 'warmup') ?? [];
+          const weighted = getExercise(whyFor.exerciseId)?.tracking === 'weight_reps';
+          return (
+            <div className="stack">
+              <div className="target-hero">
+                <span className="th-v">{t.weight != null ? fmtW(t.weight, units) : '—'}</span>
+                <span className="th-l">{t.aimReps ? `${t.aimReps} ripetizioni per serie` : `${t.repMin}–${t.repMax} ${weighted || getExercise(whyFor.exerciseId)?.tracking === 'reps' ? 'ripetizioni' : 'secondi'}`}{t.rir != null ? ` · ${t.rir} in riserva` : ''}</span>
+              </div>
+              <p className="small text-2">{t.reason}</p>
+              {prevSets.length > 0 && (
+                <div className="field"><label>Ultima volta</label>
+                  <div className="row wrap" style={{ gap: 6 }}>{prevSets.map((x) => <span key={x.uid} className="pill">{weighted ? `${toDisplayWeight(x.weight, units) ?? 0} × ${x.reps ?? 0}` : `${x.reps ?? 0}`}{x.rir != null ? ` · RIR ${x.rir}` : x.rpe != null ? ` · RPE ${x.rpe}` : ''}</span>)}</div>
+                </div>
+              )}
+              <div className="hint">
+                <b>Come funziona.</b> Doppia progressione: resti sullo stesso carico aggiungendo ripetizioni finché tutte le serie arrivano a {t.repMax}, poi il carico sale del passo minimo dell’attrezzo. Se registri RPE o RIR, l’app adatta anche le serie successive di oggi in base alla fatica. Puoi sempre cambiare il carico a mano: i valori che scrivi tu non vengono toccati.
+              </div>
+              <Link to="/settings" className="small accent">Impostazioni della progressione</Link>
+            </div>
+          );
+        })()}
+      </Sheet>
 
       {/* Menu esercizio */}
       <Sheet open={!!exMenu} onClose={() => setExMenu(null)} title={exMenu ? getExercise(exMenu.exerciseId)?.name : ''}>
@@ -489,5 +559,27 @@ function SwapSheet({ ex, onClose, onPick, profileSubs }: { ex: ExerciseLog | nul
       </Sheet>
       <ExercisePicker open={!!ex && all} onClose={() => { setAll(false); onClose(); }} onPick={(ids) => { setAll(false); onPick(ids[0]); }} title="Scegli il sostituto" />
     </>
+  );
+}
+
+/** Parametri della settimana del programma registrati nella seduta (per esercizi aggiunti o sostituiti). */
+function weekOfSession(s: WorkoutSession) {
+  const b = s.block;
+  return b ? { kind: b.kind, rir: b.rir, load: b.load, extraSets: 0, setsFactor: b.kind === 'deload' ? 0.6 : 1, repShift: 0 } : null;
+}
+
+const TARGET_TONE: Record<LoadTarget['kind'], string> = { start: 'info', increase: 'up', reps: 'same', hold: 'same', decrease: 'down', deload: 'deload', convert: 'info' };
+
+/** Riga "Obiettivo di oggi" proposta dalla progressione automatica. */
+function TargetLine({ t, units, weighted, unit, onWhy }: { t: LoadTarget; units: 'kg' | 'lb'; weighted: boolean; unit: string; onWhy: () => void }) {
+  const delta = targetDelta(t, units);
+  const main = weighted && t.weight != null ? `${fmtW(t.weight, units)} × ${t.aimReps ?? `${t.repMin}–${t.repMax}`}` : t.aimReps ? `${t.aimReps} ${unit}` : `${t.repMin}–${t.repMax} ${unit}`;
+  return (
+    <button type="button" className={`target-line ${TARGET_TONE[t.kind]}`} onClick={onWhy} aria-label={`Obiettivo di oggi: ${main}. Tocca per sapere perché`}>
+      {t.kind === 'start' ? <Sparkles size={15} /> : <Target size={15} />}
+      <span className="grow ellipsis"><b>{t.kind === 'start' ? 'Prima volta' : 'Oggi'}</b> {t.kind === 'start' && t.weight == null ? `${t.repMin}–${t.repMax} ${unit}` : main}{t.rir != null ? ` · RIR ${t.rir}` : ''}</span>
+      {delta && <span className="tl-delta">{delta}</span>}
+      <Info size={14} className="muted" />
+    </button>
   );
 }

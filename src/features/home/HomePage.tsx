@@ -10,6 +10,7 @@ import {
 } from '@/app/data';
 import { completedSessions, sessionStats } from '@/lib/stats';
 import { readiness, todaysTemplate, weekProgress } from '@/lib/insights';
+import { activeWeek, WEEK_LABEL } from '@/lib/periodization';
 import { computeTargets, totals } from '@/lib/nutrition';
 import { addDays, dayKey, formatDuration, formatLongDate, formatShortDate, fmtN, fmtW, startOfWeek, weekdayIdx } from '@/lib/util';
 import { DAY_SHORT, MUSCLE_LABEL } from '@/lib/labels';
@@ -50,6 +51,7 @@ export default function HomePage() {
   const done = completedSessions(sessions);
   const active = sessions.find((s) => s.status === 'active');
   const todayT = todaysTemplate(program, templates);
+  const blockWeek = activeWeek(program);
   const doneToday = done.filter((s) => dayKey(s.startedAt) === today);
   const last = done[done.length - 1];
   const lastStats = last ? sessionStats(last) : null;
@@ -138,7 +140,7 @@ export default function HomePage() {
         <section className="tday" aria-label="Allenamento di oggi">
           <ArtPanel spec={{ kind: 'figure', pattern: f.lead.pattern, muscles: f.lead.muscles, phase: 0.5, scene: 'gym' }} color="var(--c-training)" color2="#334f00" animate className="tday-art" />
           <div className="tday-body">
-            <span className="tday-eyebrow"><Dumbbell size={14} /> Allenamento di oggi{program ? ` · ${program.name}` : ''}</span>
+            <span className="tday-eyebrow"><Dumbbell size={14} /> Allenamento di oggi{blockWeek ? ` · Sett. ${blockWeek.week + 1} di ${blockWeek.total} · ${WEEK_LABEL[blockWeek.info.kind]}` : program ? ` · ${program.name}` : ''}</span>
             <h2 className="tday-title">{todayT.name}</h2>
             {f.muscles.length > 0 && <div className="tday-muscles">{f.muscles.slice(0, 4).map((m) => <span key={m}>{MUSCLE_LABEL[m]}</span>)}</div>}
             <div className="tday-stats">
